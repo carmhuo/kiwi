@@ -4,35 +4,25 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from kiwi.api.deps import SessionDep
-from kiwi.core.security import get_password_hash
-from kiwi.models import (
-    User,
-    UserPublic,
-)
+from kiwi.api.schemas import UserResponse
+from kiwi.crud.user import UserCRUD
 
 router = APIRouter(tags=["private"], prefix="/private")
 
 
 class PrivateUserCreate(BaseModel):
+    username: str
     email: str
     password: str
-    full_name: str
     is_verified: bool = False
 
 
-@router.post("/users/", response_model=UserPublic)
-def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
+@router.post("/users/", response_model=UserResponse)
+async def create_user(user_in: PrivateUserCreate, session: SessionDep) -> Any:
     """
     Create a new user.
     """
 
-    user = User(
-        email=user_in.email,
-        full_name=user_in.full_name,
-        hashed_password=get_password_hash(user_in.password),
-    )
-
-    session.add(user)
-    session.commit()
+    user = await UserCRUD().create_user(session, user_in.model_dump())
 
     return user

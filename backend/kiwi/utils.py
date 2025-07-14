@@ -65,15 +65,15 @@ def generate_test_email(email_to: str) -> EmailData:
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_reset_password_email(email_to: str, email: str, token: str) -> EmailData:
+def generate_reset_password_email(email_to: str, username: str, token: str) -> EmailData:
     project_name = settings.PROJECT_NAME
-    subject = f"{project_name} - Password recovery for user {email}"
+    subject = f"{project_name} - Password recovery for user {username}"
     link = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
     html_content = render_email_template(
         template_name="reset_password.html",
         context={
             "project_name": settings.PROJECT_NAME,
-            "username": email,
+            "username": username,
             "email": email_to,
             "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
             "link": link,
@@ -100,13 +100,13 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
+def generate_password_reset_token(user_id: str) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email},
+        {"exp": exp, "nbf": now, "sub": user_id},
         settings.SECRET_KEY,
         algorithm=security.ALGORITHM,
     )
