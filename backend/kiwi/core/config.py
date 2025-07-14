@@ -57,17 +57,30 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
+    DEBUG: bool = True
+    DATABASE_TYPE: Literal["postgresql", "sqlite"] = "sqlite"
+    SQLITE_DB_PATH: str = "kiwi.sqlite.db"
+
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        return MultiHostUrl.build(
-            scheme="postgresql+psycopg",
-            username=self.POSTGRES_USER,
-            password=self.POSTGRES_PASSWORD,
-            host=self.POSTGRES_SERVER,
-            port=self.POSTGRES_PORT,
-            path=self.POSTGRES_DB,
-        )
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        """Return database URI based on DATABASE_TYPE setting"""
+        if self.DATABASE_TYPE == "postgresql":
+            # PostgreSQL connection
+            return str(
+                MultiHostUrl.build(
+                    scheme="postgresql+asyncpg",
+                    username=self.POSTGRES_USER,
+                    password=self.POSTGRES_PASSWORD,
+                    host=self.POSTGRES_SERVER,
+                    port=self.POSTGRES_PORT,
+                    path=self.POSTGRES_DB,
+                )
+            )
+        if self.DATABASE_TYPE == "sqlite":
+            return f"sqlite+aiosqlite:///{self.SQLITE_DB_PATH}"
+        else:
+            raise ValueError(f"Unsupported Database Type: {self.DATABASE_TYPE}")
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
@@ -105,6 +118,24 @@ class Settings(BaseSettings):
                 warnings.warn(message, stacklevel=1)
             else:
                 raise ValueError(message)
+
+    @model_validator(mode="after")
+    def _validate_database_settings(self) -> Self:
+        """Validate database settings based on selected type"""
+        if self.DATABASE_TYPE == "postgresql":
+            # Validate required PostgreSQL settings
+            required_postgres_settings = [
+                ("POSTGRES_SERVER", self.POSTGRES_SERVER),
+                ("POSTGRES_USER", self.POSTGRES_USER),
+                ("POSTGRES_DB", self.POSTGRES_DB),
+            ]
+
+            for name, value in required_postgres_settings:
+                if not value:
+                    raise ValueError(
+                        f"{name} is required when using PostgreSQL database"
+                    )
+        return self
 
     @model_validator(mode="after")
     def _enforce_non_default_secrets(self) -> Self:
