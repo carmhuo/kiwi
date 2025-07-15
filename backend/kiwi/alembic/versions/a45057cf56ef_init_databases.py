@@ -229,8 +229,8 @@ def upgrade() -> None:
 
         conn.execute(sa.text(
             """
-            INSERT INTO "user" (id, username, hashed_password, email, is_active)
-            VALUES (:id, :username, :password, :email, :is_active)
+            INSERT INTO "user" (id, username, hashed_password, email, is_active, is_superuser)
+            VALUES (:id, :username, :password, :email, :is_active, :is_superuser)
             ON CONFLICT (username) DO NOTHING
             """
         ), {
