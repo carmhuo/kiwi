@@ -49,7 +49,7 @@ class BaseCRUD:
         await db.refresh(db_obj)
         return db_obj
 
-    async def get(self, db: AsyncSession, id: int):
+    async def get(self, db: AsyncSession, id: str):
         """根据ID获取记录"""
         return await db.get(self.model, id)
 

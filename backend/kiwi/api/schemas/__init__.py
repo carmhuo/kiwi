@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from typing import Optional, List
@@ -77,7 +78,8 @@ class UsersResponse(BaseModel):
 
 
 class ProjectMemberBase(BaseModel):
-    project_id: str
+    project_id: uuid.UUID
+    user_id: uuid.UUID
     role_code: int
 
     model_config = ConfigDict(from_attributes=True)
@@ -97,6 +99,55 @@ class UserRoleAssignment(BaseModel):
 class ProjectMemberAssignment(BaseModel):
     user_id: uuid.UUID
     role_code: int
+
+
+# 基础项目信息
+class ProjectBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+
+
+# 创建项目所需的字段
+class ProjectCreate(ProjectBase):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# 更新项目所需的字段
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectResponse(ProjectBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectsResponse(BaseModel):
+    data: List[ProjectResponse]
+    count: int
+    skip: int
+    limit: int
+
+class ProjectDetail(BaseModel):
+    project: ProjectResponse
+    members: List[ProjectMemberBase] = []
+    data_sources: List[str] = []
+    datasets: List[str] = []
+
+
+class ProjectMemberResponse(ProjectMemberBase):
+    pass
+
+
+class ProjectWithMembersResponse(ProjectResponse):
+    members: List[ProjectMemberResponse] = []
 
 
 # Generic message

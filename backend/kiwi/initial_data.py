@@ -2,7 +2,6 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 from kiwi.core.database import AsyncSessionLocal
 from kiwi.api.schemas import UserCreate
 from kiwi.crud.user import UserCRUD
@@ -28,7 +27,7 @@ async def init_db(session: AsyncSession) -> None:
             password=settings.FIRST_SUPERUSER_PASSWORD,
             is_superuser=True,
         )
-        user = await UserCRUD().create_user(session, user_in.model_dump())
+        await UserCRUD().create_user(session, user_in.model_dump())
 
 
 async def init() -> None:

@@ -1,5 +1,7 @@
-from kiwi_backend.database import BaseCRUD
-from kiwi_backend.models import Project, ProjectMember
+from typing import Sequence
+
+from kiwi.core.database import BaseCRUD
+from kiwi.models import Project, ProjectMember, UserRole
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,9 +14,10 @@ class ProjectCRUD(BaseCRUD):
             self,
             db: AsyncSession,
             project_data: dict,
-            owner_id: int
+            owner_id: str
     ):
         """创建项目并添加所有者"""
+        project_data["owner_id"] = owner_id
         project = await self.create(db, project_data)
 
         # 添加项目所有者
@@ -29,10 +32,10 @@ class ProjectCRUD(BaseCRUD):
     async def add_member(
             self,
             db: AsyncSession,
-            project_id: int,
-            user_id: int,
+            project_id: str,
+            user_id: str,
             role_code: int
-    ):
+    ) -> ProjectMember:
         """添加项目成员"""
         # 检查是否已是成员
         stmt = select(ProjectMember).where(
@@ -41,7 +44,7 @@ class ProjectCRUD(BaseCRUD):
         )
         result = await db.execute(stmt)
         if result.scalar_one_or_none():
-            return  # 已是成员则跳过
+            return result.scalar_one_or_none()
 
         # 创建成员关联
         member = ProjectMember(
@@ -51,12 +54,13 @@ class ProjectCRUD(BaseCRUD):
         )
         db.add(member)
         await db.flush()
+        return member
 
     async def remove_member(
             self,
             db: AsyncSession,
-            project_id: int,
-            user_id: int
+            project_id: str,
+            user_id: str
     ):
         """移除项目成员"""
         stmt = delete(ProjectMember).where(
@@ -69,8 +73,8 @@ class ProjectCRUD(BaseCRUD):
     async def get_project_members(
             self,
             db: AsyncSession,
-            project_id: int
-    ):
+            project_id: str
+    ) -> Sequence[ProjectMember]:
         """获取项目成员列表"""
         stmt = select(ProjectMember).where(
             ProjectMember.project_id == project_id
@@ -81,7 +85,7 @@ class ProjectCRUD(BaseCRUD):
     async def get_user_projects(
             self,
             db: AsyncSession,
-            user_id: int
+            user_id: str
     ):
         """获取用户参与的项目"""
         stmt = select(Project).join(ProjectMember).where(
@@ -89,3 +93,47 @@ class ProjectCRUD(BaseCRUD):
         )
         result = await db.execute(stmt)
         return result.scalars().all()
+
+    @staticmethod
+    async def has_user_project_access(db: AsyncSession, project_id: str, user_id: str):
+        """判断用户是否是该项目成员"""
+        return bool(ProjectCRUD.get_user_project_role(db, project_id, user_id))
+
+    @staticmethod
+    async def get_user_project_role(db: AsyncSession, project_id, user_id) -> ProjectMember:
+        """检查用户是否具备项目管理操作，仅系统管理员和项目管理员可以创建和删除项目"""
+        stmt = select(ProjectMember).where(ProjectMember.project_id == project_id,
+                                           ProjectMember.user_id == user_id)
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    async def get_by_project_name(self, db: AsyncSession, project_name: str) -> Project:
+        """根据项目名称检索项目"""
+        return await self.get_by_field(db, "name", project_name)
+
+    async def get_project_details(self, db: AsyncSession, project_id: str):
+        """获取项目详细信息，包括成员、数据源、数据集等"""
+        project = await self.get(db, id=project_id)
+
+        members = await self.get_project_members(db, project_id=project_id)
+        data_sources = await self.get_project_data_sources(db, project_id=project_id)
+        datasets = await self.get_project_datasets(db, project_id=project_id)
+
+        return {
+            "project": project,
+            "members": members,
+            "data_sources": data_sources,
+            "datasets": datasets
+        }
+
+    async def get_project_data_sources(self, db: AsyncSession, project_id: str):
+        """获取项目下的所有数据源"""
+        from kiwi.crud.data_source import DataSourceCRUD
+        ds_crud = DataSourceCRUD()
+        return await ds_crud.get_multi(db, project_id=project_id)
+
+    async def get_project_datasets(self, db: AsyncSession, project_id: str):
+        """获取项目下的所有数据集"""
+        from kiwi.crud.dataset import DatasetCRUD
+        ds_crud = DatasetCRUD()
+        return await ds_crud.get_multi(db, project_id=project_id)

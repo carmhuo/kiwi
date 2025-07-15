@@ -22,6 +22,8 @@ class User(Base):
 
     user_roles = relationship("UserRole", back_populates="user")
     project_members = relationship("ProjectMember", back_populates="user")
+    owned_projects = relationship("Project", back_populates="owner")
+    conversations = relationship("Conversation", back_populates="user")
 
 
 class Role(Base):
@@ -55,7 +57,7 @@ class Project(Base):
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    owner = relationship("User")
+    owner = relationship("User", back_populates="owned_projects")
     members = relationship("ProjectMember", back_populates="project")
     data_sources = relationship("DataSource", back_populates="project")
     datasets = relationship("Dataset", back_populates="project")
@@ -66,9 +68,11 @@ class Project(Base):
 class ProjectMember(Base):
     __tablename__ = "project_member"
 
-    project_id = Column(String(36), ForeignKey("project.id"), primary_key=True)
-    user_id = Column(String(36), ForeignKey("user.id"), primary_key=True)
+    project_id = Column(String(36), ForeignKey("project.id"), primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("user.id"), primary_key=True, index=True)
     role_code = Column(Integer, ForeignKey("role.code"))
+    created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     project = relationship("Project", back_populates="members")
     user = relationship("User", back_populates="project_members")
@@ -80,7 +84,7 @@ class DataSource(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    project_id = Column(String(36), ForeignKey("project.id"))
+    project_id = Column(String(36), ForeignKey("project.id"), index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(20), nullable=False)
     connection_config = Column(Text, nullable=False)
@@ -98,7 +102,7 @@ class Dataset(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    project_id = Column(String(36), ForeignKey("project.id"))
+    project_id = Column(String(36), ForeignKey("project.id"), index=True)
     name = Column(String(100), nullable=False)
     configuration = Column(Text, nullable=False)
     created_by = Column(String(36), ForeignKey("user.id"))
@@ -175,14 +179,14 @@ class Conversation(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    project_id = Column(String(36), ForeignKey("project.id"))
-    user_id = Column(String(36), ForeignKey("user.id"))
+    project_id = Column(String(36), ForeignKey("project.id"), index=True)
+    user_id = Column(String(36), ForeignKey("user.id"), index=True)
     title = Column(String(200), nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     project = relationship("Project", back_populates="conversations")
-    user = relationship("User")
+    user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation")
 
 
@@ -202,3 +206,19 @@ class Message(Base):
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    operator_id = Column(String(36), ForeignKey("user.id"), nullable=False, index=True)
+    action = Column(String(20), nullable=False)  # e.g., CREATE, UPDATE, DELETE
+    target_type = Column(String(30), nullable=False)  # e.g., DATASOURCE, AGENT
+    target_id = Column(String(36))
+    old_value = Column(Text)  # JSON格式
+    new_value = Column(Text)  # JSON格式
+    ip_address = Column(String(45))  # Using String for IPv4/v6 compatibility
+    created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
+
+    operator = relationship("User")
