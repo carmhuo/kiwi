@@ -537,15 +537,15 @@ graph LR
 
 ##### 用户表 (user)
 
-| 字段              | 类型           | 描述   | 约束                        |
-|:----------------|:-------------|:-----|:--------------------------|
-| id              | INTEGER      | 主键   | PK, AI                    |
-| username        | VARCHAR(50)  | 用户名  | UNIQUE, NOT NULL          |
-| hashed_password | VARCHAR(128) | 密码哈希 | NOT NULL                  |
-| email           | VARCHAR(100) | 邮箱   |                           |
-| is_active       | BOOLEAN      | 是否激活 | DEFAULT 1                 |
-| created_at      | TIMESTAMP    | 创建时间 | DEFAULT CURRENT_TIMESTAMP |
-| updated_at      | TIMESTAMP    | 更新时间 | DEFAULT CURRENT_TIMESTAMP |
+| 字段              | 类型           | 描述     | 约束                        |
+|:----------------|:-------------|:-------|:--------------------------|
+| id              | VARCHAR(36)  | 主键UUID | PK, AI                    |
+| username        | VARCHAR(50)  | 用户名    | UNIQUE, NOT NULL          |
+| hashed_password | VARCHAR(128) | 密码哈希   | NOT NULL                  |
+| email           | VARCHAR(100) | 邮箱     |                           |
+| is_active       | BOOLEAN      | 是否激活   | DEFAULT 1                 |
+| created_at      | TIMESTAMP    | 创建时间   | DEFAULT CURRENT_TIMESTAMP |
+| updated_at      | TIMESTAMP    | 更新时间   | DEFAULT CURRENT_TIMESTAMP |
 
 ##### 角色表 (role)
 
@@ -559,33 +559,33 @@ graph LR
 
 ##### 用户角色关联表 (user_role)
 
-| 字段        | 类型      | 描述   | 约束                        |
-|:----------|:--------|:-----|:--------------------------|
-| user_id   | INTEGER | 用户ID | FK → user(id), NOT NULL   |
-| role_code | INTEGER | 角色ID | FK → role(code), NOT NULL |
-|           |         |      | PK (user_id, role_code)   |
+| 字段        | 类型          | 描述   | 约束                        |
+|:----------|:------------|:-----|:--------------------------|
+| user_id   | VARCHAR(36) | 用户ID | FK → user(id), NOT NULL   |
+| role_code | INTEGER     | 角色ID | FK → role(code), NOT NULL |
+|           |             |      | PK (user_id, role_code)   |
 
 ##### 项目表 (project)
 
-| 字段          | 类型           | 描述    | 约束                        |
-|:------------|:-------------|:------|:--------------------------|
-| id          | INTEGER      | 主键    | PK, AI                    |
-| name        | VARCHAR(100) | 项目名称  | NOT NULL                  |
-| description | TEXT         | 项目描述  |                           |
-| owner_id    | INTEGER      | 所有者ID | FK → user(id)             |
-| created_at  | TIMESTAMP    | 创建时间  | DEFAULT CURRENT_TIMESTAMP |
-| updated_at  | TIMESTAMP    | 更新时间  | DEFAULT CURRENT_TIMESTAMP |
+| 字段          | 类型           | 描述     | 约束                        |
+|:------------|:-------------|:-------|:--------------------------|
+| id          | VARCHAR(36)  | 主键UUID | PK, AI                    |
+| name        | VARCHAR(100) | 项目名称   | NOT NULL                  |
+| description | TEXT         | 项目描述   |                           |
+| owner_id    | VARCHAR(36)  | 所有者ID  | FK → user(id)             |
+| created_at  | TIMESTAMP    | 创建时间   | DEFAULT CURRENT_TIMESTAMP |
+| updated_at  | TIMESTAMP    | 更新时间   | DEFAULT CURRENT_TIMESTAMP |
 
 ##### 数据源表 (data_source)
 
 | 字段                | 类型           | 描述         | 约束                        |
 |:------------------|:-------------|:-----------|:--------------------------|
-| id                | INTEGER      | 主键         | PK, AI                    |
+| id                | VARCHAR(36)  | 主键UUID     | PK, AI                    |
 | project_id        | INTEGER      | 所属项目ID     | FK → project(id)          |
 | name              | VARCHAR(100) | 数据源名称      | NOT NULL                  |
 | type              | VARCHAR(20)  | 数据库类型      | NOT NULL                  |
 | connection_config | TEXT         | 连接配置(JSON) | NOT NULL                  |
-| created_by        | INTEGER      | 创建者ID      | FK → user(id)             |
+| created_by        | VARCHAR(36)  | 创建者ID      | FK → user(id)             |
 | created_at        | TIMESTAMP    | 创建时间       | DEFAULT CURRENT_TIMESTAMP |
 | updated_at        | TIMESTAMP    | 更新时间       | DEFAULT CURRENT_TIMESTAMP |
 
@@ -593,7 +593,7 @@ graph LR
 
 | 字段            | 类型           | 描述          | 约束                        |
 |:--------------|:-------------|:------------|:--------------------------|
-| id            | INTEGER      | 主键          | PK, AI                    |
+| id            | VARCHAR(36)  | 主键UUID      | PK, AI                    |
 | project_id    | INTEGER      | 所属项目ID      | FK → project(id)          |
 | name          | VARCHAR(100) | 数据集名称       | NOT NULL                  |
 | configuration | TEXT         | 数据集配置(JSON) | NOT NULL                  |
@@ -655,8 +655,8 @@ configuration样例
 
 | 字段             | 类型           | 描述    | 约束                     |
 |:---------------|:-------------|:------|:-----------------------|
-| dataset_id     | INTEGER      | 数据集ID | FK → dataset(id)       |
-| data_source_id | INTEGER      | 数据源ID | FK → data_source(id)   |
+| dataset_id     | VARCHAR(36)  | 数据集ID | FK → dataset(id)       |
+| data_source_id | VARCHAR(36)  | 数据源ID | FK → data_source(id)   |
 | alias          | VARCHAR(100) | 数据源别名 | UNIQUE, NOT NULL       |
 |                |              |       | PK (dataset_id, alias) |
 
@@ -700,12 +700,12 @@ configuration样例
 
 | 字段         | 类型           | 描述         | 约束                        |
 |:-----------|:-------------|:-----------|:--------------------------|
-| id         | INTEGER      | 主键         | PK, AI                    |
-| project_id | INTEGER      | 所属项目ID     | FK → project(id)          |
+| id         | VARCHAR(36)  | 主键UUID     | PK, AI                    |
+| project_id | VARCHAR(36)  | 所属项目ID     | FK → project(id)          |
 | name       | VARCHAR(100) | Agent名称    | NOT NULL                  |
 | type       | VARCHAR(20)  | Agent类型    | NOT NULL                  |
 | config     | TEXT         | 配置参数(JSON) | NOT NULL                  |
-| created_by | INTEGER      | 创建者ID      | FK → user(id)             |
+| created_by | VARCHAR(36)  | 创建者ID      | FK → user(id)             |
 | created_at | TIMESTAMP    | 创建时间       | DEFAULT CURRENT_TIMESTAMP |
 | updated_at | TIMESTAMP    | 更新时间       | DEFAULT CURRENT_TIMESTAMP |
 
@@ -713,32 +713,32 @@ configuration样例
 
 | 字段         | 类型          | 描述           | 约束             |
 |:-----------|:------------|:-------------|:---------------|
-| id         | INTEGER     | 主键           | PK             |
-| agent_id   | INTEGER     | Agent ID     | FK → agent(id) |
+| id         | VARCHAR(36) | 主键 UUID      | PK             |
+| agent_id   | VARCHAR(36) | Agent ID     | FK → agent(id) |
 | version    | VARCHAR(20) | 语义化版本 v1.2.3 | NOT NULL       |
 | config     | TEXT        | Agent配置信息    | NOT NULL       |
 | checksum   | CHAR(64)    | 配置SHA256校验和  | NOT NULL       |
-| created_by | INTEGER     | 创建者ID        | FK → user(id)  |
+| created_by | VARCHAR(36) | 创建者ID        | FK → user(id)  |
 | created_at | TIMESTAMP   | 创建时间         |                |
 | is_current | BOOLEAN     | 是否为当前版本      | 默认False        |
 
 ##### Agent 指标表 (agent_metric)
 
-| 字段                 | 类型        | 描述       | 约束                     |
-|:-------------------|:----------|:---------|:-----------------------|
-| id                 | INTEGER   | 主键       | PK                     |
-| agent_version_id   | INTEGER   | Agent ID | FK → agent_version(id) |
-| sql_gen_latency    | FLOAT     | sql生成延时  | NOT NULL               |
-| query_success_rate | FLOAT     | 查询成功率    | NOT NULL               |
-| created_at         | TIMESTAMP | 创建时间     |                        |
+| 字段                 | 类型          | 描述       | 约束                     |
+|:-------------------|:------------|:---------|:-----------------------|
+| id                 | VARCHAR(36) | 主键UUID   | PK                     |
+| agent_version_id   | VARCHAR(36) | Agent ID | FK → agent_version(id) |
+| sql_gen_latency    | FLOAT       | sql生成延时  | NOT NULL               |
+| query_success_rate | FLOAT       | 查询成功率    | NOT NULL               |
+| created_at         | TIMESTAMP   | 创建时间     |                        |
 
 ##### 对话表 (conversation)
 
 | 字段         | 类型           | 描述     | 约束                        |
 |:-----------|:-------------|:-------|:--------------------------|
-| id         | INTEGER      | 主键     | PK, AI                    |
-| project_id | INTEGER      | 所属项目ID | FK → project(id)          |
-| user_id    | INTEGER      | 用户ID   | FK → user(id)             |
+| id         | VARCHAR(36)  | 主键UUID | PK, AI                    |
+| project_id | VARCHAR(36)  | 所属项目ID | FK → project(id)          |
+| user_id    | VARCHAR(36)  | 用户ID   | FK → user(id)             |
 | title      | VARCHAR(200) | 对话标题   | NOT NULL                  |
 | created_at | TIMESTAMP    | 创建时间   | DEFAULT CURRENT_TIMESTAMP |
 | updated_at | TIMESTAMP    | 更新时间   | DEFAULT CURRENT_TIMESTAMP |
@@ -747,8 +747,8 @@ configuration样例
 
 | 字段              | 类型          | 描述         | 约束                             |
 |:----------------|:------------|:-----------|:-------------------------------|
-| id              | INTEGER     | 主键         | PK, AI                         |
-| conversation_id | INTEGER     | 对话ID       | FK → conversation(id)          |
+| id              | VARCHAR(36) | 主键UUID     | PK, AI                         |
+| conversation_id | VARCHAR(36) | 对话ID       | FK → conversation(id)          |
 | content         | TEXT        | 消息内容       | NOT NULL                       |
 | role            | VARCHAR(10) | 角色         | user/assistant                 |
 | sql_query       | TEXT        | 执行的SQL     |                                |
@@ -760,23 +760,28 @@ configuration样例
 
 ##### 项目成员表 (project_member)
 
-| 字段         | 类型      | 描述   | 约束                       |
-|:-----------|:--------|:-----|:-------------------------|
-| project_id | INTEGER | 项目ID | FK → project(id)         |
-| user_id    | INTEGER | 用户ID | FK → user(id)            |
-| role_code  | INTEGER | 角色ID | FK → role(code)          |
-|            |         |      | PK (project_id, user_id) |
+| 字段         | 类型          | 描述   | 约束                        |
+|:-----------|:------------|:-----|:--------------------------|
+| project_id | VARCHAR(36) | 项目ID | FK → project(id)          |
+| user_id    | VARCHAR(36) | 用户ID | FK → user(id)             |
+| role_code  | INTEGER     | 角色ID | FK → role(code)           |
+| created_at | TIMESTAMP   | 创建时间 | DEFAULT CURRENT_TIMESTAMP |
+| updated_at | TIMESTAMP   | 更新时间 | DEFAULT CURRENT_TIMESTAMP |
+|            |             |      | PK (project_id, user_id)  |
 
 ##### 审计表 (audit_log)
 
-| 字段          | 类型          | 描述                         | 约束            |
-|-------------|-------------|----------------------------|---------------|
-| operator_id | BIGINT      | 操作人 ID                     | FK → user(id) |
-| action      | VARCHAR(20) | 操作类型（CREATE/UPDATE/DELETE） |               |
-| target_type | VARCHAR(30) | 操作对象类型（DATASOURCE/AGENT）   |               |
-| old_value   | JSONB       | 操作前的值（JSON 格式）             |               |
-| new_value   | JSONB       | 操作后的值（JSON 格式）             |               |
-| ip_address  | INET        | 操作来源 IP 地址                 |               |
+| 字段          | 类型          | 描述                         | 约束                        |
+|-------------|-------------|----------------------------|---------------------------|
+| id          | VARCHAR(36) | 主键UUID                     | PK                        |
+| operator_id | VARCHAR(36) | 操作人 ID                     | FK → user(id)             |
+| action      | VARCHAR(20) | 操作类型（CREATE/UPDATE/DELETE） |                           |
+| target_type | VARCHAR(30) | 操作对象类型（DATASOURCE/AGENT）   |                           |
+| target_id   | VARCHAR(36) | 操作对象类型（DATASOURCE/AGENT）   |                           |
+| old_value   | JSONB       | 操作前的值（JSON 格式）             |                           |
+| new_value   | JSONB       | 操作后的值（JSON 格式）             |                           |
+| ip_address  | INET        | 操作来源 IP 地址                 |                           |
+| created_at  | TIMESTAMP   | 创建时间                       | DEFAULT CURRENT_TIMESTAMP |
 
 #### 数据流
 
