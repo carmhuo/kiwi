@@ -200,22 +200,32 @@ flowchart TD
 
 ### 2.7 权限管理系统
 
+权限功能是系统安全的重要基础保障，Kiwi提供了提供了完善安全的权限系统。
+
 角色权限矩阵：
 
-| 功能      | 系统管理员 | 项目管理员  | 数据分析师  | 普通用户 |
-|---------|-------|--------|--------|------|
-| 创建项目    | ✓     | ✗      | ✗      | ✗    |
-| 删除项目    | ✓     | ✗      | ✗      | ✗    |
-| 添加成员    | ✓     | ✓      | ✗      | ✗    |
-| 创建数据源   | ✓     | ✓      | ✗      | ✗    |
-| 查看数据源   | ✓     | ✓      | ✓      | ✗    |
-| 创建数据集   | ✓     | ✓      | ✓      | ✗    |
-| 查看数据集   | ✓     | ✓      | ✓      | ✓    |
-| 查询数据    | ✓     | ✓      | ✓      | ✓    |
-| 管理Agent | ✓     | ✓      | ✗      | ✗    |
-| 查看敏感数据  | ✓     | △(需审批) | △(需审批) | ✗    |
+| 功能       | 系统管理员 | 项目管理员  | 数据源管理员 | 数据分析师  | 普通用户 |
+|----------|-------|--------|--------|--------|------|
+| 创建项目     | ✓     | ✗      | ✗      | ✗      | ✗    |
+| 删除项目     | ✓     | ✗      | ✗      | ✗      | ✗    |
+| 添加成员     | ✓     | ✓      | ✗      | ✗      | ✗    |
+| 创建数据源    | ✓     | ✓      | ✓      | ✗      | ✗    |
+| 查看数据源    | ✓     | △      | ✓      | ✓      | ✗    |
+| 编辑数据源    | ✓     | △      | ✓      | ✗      | ✗    |
+| 删除数据源    | ✓     | △      | △      | ✗      | ✗    |
+| 关联数据源到项目 | ✓     | △      | ✓      | ✗      | ✗    |
+| 创建数据集    | ✓     | ✓      | ✗      | ✓      | ✗    |
+| 查看数据集    | ✓     | ✓      | ✗      | ✓      | ✓    |
+| 查询数据     | ✓     | ✓      | ✗      | ✓      | ✓    |
+| 管理Agent  | ✓     | ✓      | ✗      | ✗      | ✗    |
+| 查看敏感数据   | ✓     | △(需审批) | ✗      | △(需审批) | ✗    |
 
 ✓: 完全权限 △: 仅自己创建的 ✗: 无权限
+
+- 项目管理员： 拥有管理项目及项目内的资源和成员的权限，同时拥有创建数据源和数据集等权限
+- 数据源管理员： 拥有创建数据源的权限及编辑所有数据源的权限。
+- 数据分析师： 拥有所在项目即席查询的操作权限，同时拥有创建数据集权限
+- 普通用户： 拥有所在项目的报表查看权限。
 
 ## 3. 前端界面规范
 
@@ -445,12 +455,19 @@ graph TD
 
 #### 数据管理
 
-| 端点                                  | 方法   | 功能      |
-|-------------------------------------|------|---------|
-| /projects/{project_id}/data-sources | POST | 创建数据源   |
-| /projects/{project_id}/data-sources | GET  | 获取数据源详情 |
-| /projects/{project_id}/datasets     | POST | 创建数据集   |
-| /datasets/{dataset_id}              | GET  | 获取数据集详情 |
+| 端点                          | 方法   | 功能           |
+|-----------------------------|------|--------------|
+| /data-sources               | POST | 创建全局数据源      |
+| /projects/{id}/data-sources | POST | 关联数据源到项目     | 
+| /projects/{id}/data-sources | GET  | 获取项目关联的数据源列表 |
+
+| 端点                                  | 方法   | 功能           |
+|-------------------------------------|------|--------------|
+| /data-sources                       | POST | 创建全局数据源      |
+| /projects/{project_id}/data-sources | POST | 关联数据源到项目     |
+| /projects/{project_id}/data-sources | GET  | 获取项目关联的数据源列表 |
+| /projects/{project_id}/datasets     | POST | 创建数据集        |
+| /datasets/{dataset_id}              | GET  | 获取数据集详情      |
 
 #### Agent管理
 
@@ -470,7 +487,7 @@ graph TD
 
 ### 4.3 数据库设计
 
-#### E-R图
+#### 4.3.1 E-R图
 
 ```mermaid
 erDiagram
@@ -480,9 +497,12 @@ erDiagram
     PROJECT ||--o{ PROJECT_MEMBER: "拥有成员"
     USER ||--o{ PROJECT_MEMBER: "属于"
     ROLE ||--o{ PROJECT_MEMBER: "具有角色"
-    PROJECT ||--o{ DATA_SOURCE: "包含"
-    DATA_SOURCE ||--o{ DATASET_DATA_SOURCE: "引用"
-    DATASET ||--o{ DATASET_DATA_SOURCE: "包含"
+%% 项目与数据源关系（多对多）
+    PROJECT ||--o{ PROJECT_DATA_SOURCE: "包含"
+    DATA_SOURCE ||--o{ PROJECT_DATA_SOURCE: "引用"
+%% 数据集与项目数据源关系（多对多）
+    DATASET ||--o{ DATASET_PROJECT_SOURCE: "使用"
+    PROJECT_DATA_SOURCE ||--o{ DATASET_PROJECT_SOURCE: "被引用"
     PROJECT ||--o{ DATASET: "包含"
     PROJECT ||--o{ AGENT: "包含"
     PROJECT ||--o{ CONVERSATION: "包含"
@@ -492,9 +512,10 @@ erDiagram
     AGENT ||--o{ MESSAGE: "生成"
     AGENT ||--o{ AGENT_VERSION: "保存"
     AGENT_VERSION ||--o{ AGENT_METRIC: "记录"
+    USER ||--o{ AUDIT_LOG: "操作"
 ```
 
-##### 表关系说明
+##### 4.3.2 表关系说明
 
 **用户与角色关系：**
 
@@ -517,6 +538,40 @@ graph TD
 - 项目与用户多对多关系
 - 通过PROJECT_MEMBER表管理
 - 每个成员在项目中有一个角色
+
+**数据源与项目关系：**
+
+```mermaid
+graph TD
+    A[全局数据源池] -->|关联| B(项目A)
+    A -->|关联| C(项目B)
+    A -->|关联| D(项目C)
+
+    subgraph 全局层
+        A
+    end
+
+    subgraph 项目层
+        B
+        C
+        D
+    end
+```
+
+同一项目内别名必须唯一，否则会导致：
+
+- 数据集配置无法明确引用数据源（PRD 3.2.3节）
+
+- SQL生成时表前缀冲突（prod_db.orders 指向不明）
+
+- 联邦查询执行混乱
+
+```mermaid
+graph TD
+    P1[项目A] --> A1[数据源X 别名=prod_db]
+    P1 --> A2[数据源Y 别名=prod_db] --> 冲突!
+    P2[项目B] --> B1[数据源X 别名=prod_db] --> 允许
+```
 
 **数据集与数据源关系：**
 
@@ -542,7 +597,7 @@ graph LR
 | id              | VARCHAR(36)  | 主键UUID | PK, AI                    |
 | username        | VARCHAR(50)  | 用户名    | UNIQUE, NOT NULL          |
 | hashed_password | VARCHAR(128) | 密码哈希   | NOT NULL                  |
-| email           | VARCHAR(100) | 邮箱     |                           |
+| email           | VARCHAR(100) | 邮箱     | NOT NULL                  |
 | is_active       | BOOLEAN      | 是否激活   | DEFAULT 1                 |
 | created_at      | TIMESTAMP    | 创建时间   | DEFAULT CURRENT_TIMESTAMP |
 | updated_at      | TIMESTAMP    | 更新时间   | DEFAULT CURRENT_TIMESTAMP |
@@ -581,13 +636,39 @@ graph LR
 | 字段                | 类型           | 描述         | 约束                        |
 |:------------------|:-------------|:-----------|:--------------------------|
 | id                | VARCHAR(36)  | 主键UUID     | PK, AI                    |
-| project_id        | INTEGER      | 所属项目ID     | FK → project(id)          |
 | name              | VARCHAR(100) | 数据源名称      | NOT NULL                  |
 | type              | VARCHAR(20)  | 数据库类型      | NOT NULL                  |
 | connection_config | TEXT         | 连接配置(JSON) | NOT NULL                  |
+| owner_id          | VARCHAR(36)  | 所有者ID      | FK → user(id)             |
 | created_by        | VARCHAR(36)  | 创建者ID      | FK → user(id)             |
 | created_at        | TIMESTAMP    | 创建时间       | DEFAULT CURRENT_TIMESTAMP |
 | updated_at        | TIMESTAMP    | 更新时间       | DEFAULT CURRENT_TIMESTAMP |
+
+##### 项目-数据源关联表(project_data_source)
+
+| 字段             | 类型           | 描述       | 约束                                                                |
+|:---------------|:-------------|:---------|:------------------------------------------------------------------|
+| project_id     | VARCHAR(36)  | 项目ID     | FK → project(id), NOT NULL                                        |
+| data_source_id | VARCHAR(36)  | 数据源ID    | FK → data_source(id), NOT NULL                                    |
+| alias          | VARCHAR(100) | 项目内数据源别名 | NOT NULL                                                          |
+| is_active      | BOOLEAN      | 是否启用     | DEFAULT 1                                                         |                    |
+|                |              |          | PK (project_id, data_source_id),  <br/>UNIQUE (project_id, alias) |
+
+**别名管理规则**
+
+1. **唯一性约束**： 同一项目内数据源别名必须唯一,UNIQUE (project_id, alias)
+2. **默认别名生成**：
+
+- 创建时自动生成（若未提供）：
+
+   ```text
+   def generate_alias(data_source_name):
+    return f"ds_{sanitize_name(data_source_name)}_{short_uuid()}"
+   ```
+
+3. **修改限制**
+    - 别名创建后不允许修改（避免影响已配置的数据集）
+    - 如需变更，需先解除所有数据集的关联
 
 ##### 数据集表 (dataset)
 
@@ -607,7 +688,7 @@ configuration样例
 {
   "tables": [
     {
-      "source_id": 1,
+      "source_alias": "mysql_prod",
       "table_name": "orders",
       "columns": [
         "id",
@@ -616,7 +697,7 @@ configuration样例
       ]
     },
     {
-      "source_id": 2,
+      "source_alias": "pg_prod",
       "table_name": "users",
       "columns": [
         "id",
@@ -627,12 +708,12 @@ configuration样例
   ],
   "table_mappings": [
     {
-      "source_alias": "mysql_orders",
+      "source_alias": "mysql_prod",
       "source_table": "orders",
       "target_name": "sales_orders"
     },
     {
-      "source_alias": "pg_customers",
+      "source_alias": "pg_prod",
       "source_table": "users",
       "target_name": "customers"
     }
@@ -649,52 +730,16 @@ configuration样例
 }
 ```
 
-> source_id: 数据源ID; source_alias: 对应DATASET_DATA_SOURCE.alias; target_name: 数据集内表名
+- source_alias: 应项目内数据源别名（project_data_source.alias）;
+- target_name: 表名，数据集内唯一；
 
-##### 数据集数据源表(dataset_data_source)
+##### 数据集项目数据源表(dataset_project_source)
 
-| 字段             | 类型           | 描述    | 约束                     |
-|:---------------|:-------------|:------|:-----------------------|
-| dataset_id     | VARCHAR(36)  | 数据集ID | FK → dataset(id)       |
-| data_source_id | VARCHAR(36)  | 数据源ID | FK → data_source(id)   |
-| alias          | VARCHAR(100) | 数据源别名 | UNIQUE, NOT NULL       |
-|                |              |       | PK (dataset_id, alias) |
-
-增加数据源别名，
-
-1. **解决多数据源同名冲突**
-    - 当多个数据源中存在相同表名（如`users`）时，在联邦查询中直接使用表名会产生冲突
-    - 别名允许为每个数据源分配唯一标识符，例如：`mysql_prod.users`, `pg_backup.users`
-
-2. **简化数据集配置**
-    - 在数据集的表映射配置中，通过别名引用数据源比使用数据源ID更直观
-    - 别名在配置中更易读且稳定（即使数据源ID变化，别名可保持不变）
-3. **支持数据源替换**
-    - 当需要切换数据源（如从测试库切到生产库）时，只需修改DATASET_DATA_SOURCE中数据源的指向，而数据集配置无需改变（因为别名保持不变）
-4. **查询可读性提升**\
-    - 在生成的SQL中使用别名更清晰：
-   ```sql
-   SELECT * FROM mysql_prod.orders 
-   JOIN pg_backup.users ON ...
-   ```
-5. **权限隔离**：
-    - 别名可作为安全层，隐藏真实数据源信息
-
-**别名管理规则**
-
-1. **唯一性约束**： 确保在同一个数据集内别名唯一
-2. **默认别名生成**：
-
-- 创建时自动生成（若未提供）：
-
-   ```text
-   def generate_alias(data_source_name):
-    return f"ds_{sanitize_name(data_source_name)}_{short_uuid()}"
-   ```
-
-3. **修改限制**
-    - 别名创建后不允许修改（避免影响已配置的数据集）
-    - 如需变更，需先解除所有数据集的关联
+| 字段                | 类型           | 描述    | 约束                                 |
+|:------------------|:-------------|:------|:-----------------------------------|
+| dataset_id        | VARCHAR(36)  | 数据集ID | FK → dataset(id)                   |
+| data_source_alias | VARCHAR(100) | 数据源别名 | FK → project_data_source(alias)    |
+|                   |              |       | PK (dataset_id, data_source_alias) |
 
 ##### Agent表 (agent)
 
@@ -809,6 +854,7 @@ CREATE INDEX idx_project_owner ON project(owner_id);
 CREATE INDEX idx_dataset_project ON dataset(project_id);
 CREATE INDEX idx_conversation_user ON conversation(user_id);
 CREATE INDEX idx_agent_version ON agent_version(agent_id, version);
+CREATE UNIQUE INDEX idx_project_data_source_alias ON project_data_source(project_id, alias);
 ```
 
 ##### 外键索引

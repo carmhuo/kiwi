@@ -1,8 +1,8 @@
-"""init databases
+"""init database
 
-Revision ID: a45057cf56ef
+Revision ID: e13b34453731
 Revises: 
-Create Date: 2025-07-14 11:27:26.372505
+Create Date: 2025-07-16 14:53:13.366869
 
 """
 import uuid
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = 'a45057cf56ef'
+revision: str = 'e13b34453731'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -20,7 +20,8 @@ depends_on: Union[str, Sequence[str], None] = None
 SYSTEM_ROLES = [
     {"code": 0, "name": "系统管理员", "description": "拥有系统所有权限"},
     {"code": 1, "name": "项目管理员", "description": "管理特定项目的所有资源"},
-    {"code": 2, "name": "数据分析师", "description": "可访问和查询数据，生成报告"},
+    {"code": 2, "name": "数据源管理员", "description": "拥有创建数据源的权限及编辑所有数据源的权限。"},
+    {"code": 3, "name": "数据分析师", "description": "可访问和查询数据，生成报告"},
     {"code": 99, "name": "普通成员", "description": "项目基础成员权限"}
 ]
 
@@ -56,6 +57,37 @@ def upgrade() -> None:
                     sa.UniqueConstraint('username')
                     )
     op.create_index(op.f('ix_user_id'), 'user', ['id'], unique=True)
+    op.create_table('audit_log',
+                    sa.Column('id', sa.String(length=36), nullable=False),
+                    sa.Column('operator_id', sa.String(length=36), nullable=False),
+                    sa.Column('action', sa.String(length=20), nullable=False),
+                    sa.Column('target_type', sa.String(length=30), nullable=False),
+                    sa.Column('target_id', sa.String(length=36), nullable=True),
+                    sa.Column('old_value', sa.Text(), nullable=True),
+                    sa.Column('new_value', sa.Text(), nullable=True),
+                    sa.Column('ip_address', sa.String(length=45), nullable=True),
+                    sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                              nullable=False),
+                    sa.ForeignKeyConstraint(['operator_id'], ['user.id'], ),
+                    sa.PrimaryKeyConstraint('id')
+                    )
+    op.create_index(op.f('ix_audit_log_operator_id'), 'audit_log', ['operator_id'], unique=False)
+    op.create_table('data_source',
+                    sa.Column('id', sa.String(length=36), nullable=False),
+                    sa.Column('name', sa.String(length=100), nullable=False),
+                    sa.Column('type', sa.String(length=20), nullable=False),
+                    sa.Column('connection_config', sa.Text(), nullable=False),
+                    sa.Column('owner_id', sa.String(length=36), nullable=True),
+                    sa.Column('created_by', sa.String(length=36), nullable=True),
+                    sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                              nullable=False),
+                    sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                              nullable=False),
+                    sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
+                    sa.ForeignKeyConstraint(['owner_id'], ['user.id'], ),
+                    sa.PrimaryKeyConstraint('id')
+                    )
+    op.create_index(op.f('ix_data_source_id'), 'data_source', ['id'], unique=True)
     op.create_table('project',
                     sa.Column('id', sa.String(length=36), nullable=False),
                     sa.Column('name', sa.String(length=100), nullable=False),
@@ -106,22 +138,8 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id')
                     )
     op.create_index(op.f('ix_conversation_id'), 'conversation', ['id'], unique=True)
-    op.create_table('data_source',
-                    sa.Column('id', sa.String(length=36), nullable=False),
-                    sa.Column('project_id', sa.String(length=36), nullable=True),
-                    sa.Column('name', sa.String(length=100), nullable=False),
-                    sa.Column('type', sa.String(length=20), nullable=False),
-                    sa.Column('connection_config', sa.Text(), nullable=False),
-                    sa.Column('created_by', sa.String(length=36), nullable=True),
-                    sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
-                              nullable=False),
-                    sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
-                              nullable=False),
-                    sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
-                    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
-                    sa.PrimaryKeyConstraint('id')
-                    )
-    op.create_index(op.f('ix_data_source_id'), 'data_source', ['id'], unique=True)
+    op.create_index(op.f('ix_conversation_project_id'), 'conversation', ['project_id'], unique=False)
+    op.create_index(op.f('ix_conversation_user_id'), 'conversation', ['user_id'], unique=False)
     op.create_table('dataset',
                     sa.Column('id', sa.String(length=36), nullable=False),
                     sa.Column('project_id', sa.String(length=36), nullable=True),
@@ -137,15 +155,35 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id')
                     )
     op.create_index(op.f('ix_dataset_id'), 'dataset', ['id'], unique=True)
+    op.create_index(op.f('ix_dataset_project_id'), 'dataset', ['project_id'], unique=False)
+    op.create_table('project_data_source',
+                    sa.Column('project_id', sa.String(length=36), nullable=False),
+                    sa.Column('data_source_id', sa.String(length=36), nullable=False),
+                    sa.Column('alias', sa.String(length=100), nullable=False),
+                    sa.Column('is_active', sa.Boolean(), nullable=True),
+                    sa.ForeignKeyConstraint(['data_source_id'], ['data_source.id'], ),
+                    sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
+                    sa.PrimaryKeyConstraint('project_id', 'data_source_id'),
+                    sa.UniqueConstraint('project_id', 'alias', name='uix_project_alias')
+                    )
+    op.create_index(op.f('ix_project_data_source_data_source_id'), 'project_data_source', ['data_source_id'],
+                    unique=False)
+    op.create_index(op.f('ix_project_data_source_project_id'), 'project_data_source', ['project_id'], unique=False)
     op.create_table('project_member',
                     sa.Column('project_id', sa.String(length=36), nullable=False),
                     sa.Column('user_id', sa.String(length=36), nullable=False),
                     sa.Column('role_code', sa.Integer(), nullable=True),
+                    sa.Column('created_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                              nullable=False),
+                    sa.Column('updated_at', sa.TIMESTAMP(), server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                              nullable=False),
                     sa.ForeignKeyConstraint(['project_id'], ['project.id'], ),
                     sa.ForeignKeyConstraint(['role_code'], ['role.code'], ),
                     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
                     sa.PrimaryKeyConstraint('project_id', 'user_id')
                     )
+    op.create_index(op.f('ix_project_member_project_id'), 'project_member', ['project_id'], unique=False)
+    op.create_index(op.f('ix_project_member_user_id'), 'project_member', ['user_id'], unique=False)
     op.create_table('agent_version',
                     sa.Column('id', sa.String(length=36), nullable=False),
                     sa.Column('agent_id', sa.String(length=36), nullable=True),
@@ -161,13 +199,12 @@ def upgrade() -> None:
                     sa.PrimaryKeyConstraint('id')
                     )
     op.create_index(op.f('ix_agent_version_id'), 'agent_version', ['id'], unique=True)
-    op.create_table('dataset_data_source',
+    op.create_table('dataset_project_source',
                     sa.Column('dataset_id', sa.String(length=36), nullable=False),
-                    sa.Column('data_source_id', sa.String(length=36), nullable=False),
-                    sa.Column('alias', sa.String(length=100), nullable=False),
-                    sa.ForeignKeyConstraint(['data_source_id'], ['data_source.id'], ),
+                    sa.Column('data_source_alias', sa.String(length=100), nullable=False),
+                    sa.ForeignKeyConstraint(['data_source_alias'], ['project_data_source.alias'], ),
                     sa.ForeignKeyConstraint(['dataset_id'], ['dataset.id'], ),
-                    sa.PrimaryKeyConstraint('dataset_id', 'data_source_id')
+                    sa.PrimaryKeyConstraint('dataset_id', 'data_source_alias')
                     )
     op.create_table('message',
                     sa.Column('id', sa.String(length=36), nullable=False),
@@ -264,14 +301,20 @@ def downgrade() -> None:
     op.drop_table('agent_metric')
     op.drop_index(op.f('ix_message_id'), table_name='message')
     op.drop_table('message')
-    op.drop_table('dataset_data_source')
+    op.drop_table('dataset_project_source')
     op.drop_index(op.f('ix_agent_version_id'), table_name='agent_version')
     op.drop_table('agent_version')
+    op.drop_index(op.f('ix_project_member_user_id'), table_name='project_member')
+    op.drop_index(op.f('ix_project_member_project_id'), table_name='project_member')
     op.drop_table('project_member')
+    op.drop_index(op.f('ix_project_data_source_project_id'), table_name='project_data_source')
+    op.drop_index(op.f('ix_project_data_source_data_source_id'), table_name='project_data_source')
+    op.drop_table('project_data_source')
+    op.drop_index(op.f('ix_dataset_project_id'), table_name='dataset')
     op.drop_index(op.f('ix_dataset_id'), table_name='dataset')
     op.drop_table('dataset')
-    op.drop_index(op.f('ix_data_source_id'), table_name='data_source')
-    op.drop_table('data_source')
+    op.drop_index(op.f('ix_conversation_user_id'), table_name='conversation')
+    op.drop_index(op.f('ix_conversation_project_id'), table_name='conversation')
     op.drop_index(op.f('ix_conversation_id'), table_name='conversation')
     op.drop_table('conversation')
     op.drop_index(op.f('ix_agent_id'), table_name='agent')
@@ -279,6 +322,10 @@ def downgrade() -> None:
     op.drop_table('user_role')
     op.drop_index(op.f('ix_project_id'), table_name='project')
     op.drop_table('project')
+    op.drop_index(op.f('ix_data_source_id'), table_name='data_source')
+    op.drop_table('data_source')
+    op.drop_index(op.f('ix_audit_log_operator_id'), table_name='audit_log')
+    op.drop_table('audit_log')
     op.drop_index(op.f('ix_user_id'), table_name='user')
     op.drop_table('user')
     op.drop_table('role')

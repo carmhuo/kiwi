@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, ForeignKey, TIMESTAMP, Float
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    ForeignKey,
+    TIMESTAMP,
+    Float,
+    UniqueConstraint
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -23,6 +33,7 @@ class User(Base):
     user_roles = relationship("UserRole", back_populates="user")
     project_members = relationship("ProjectMember", back_populates="user")
     owned_projects = relationship("Project", back_populates="owner")
+    owned_data_sources = relationship("DataSource", back_populates="owner")
     conversations = relationship("Conversation", back_populates="user")
 
 
@@ -35,6 +46,8 @@ class Role(Base):
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    user_roles = relationship("UserRole", back_populates="role")
+
 
 class UserRole(Base):
     __tablename__ = "user_role"
@@ -43,7 +56,7 @@ class UserRole(Base):
     role_code = Column(Integer, ForeignKey("role.code"), primary_key=True)
 
     user = relationship("User", back_populates="user_roles")
-    role = relationship("Role")
+    role = relationship("Role", back_populates="user_roles")
 
 
 class Project(Base):
@@ -59,7 +72,7 @@ class Project(Base):
 
     owner = relationship("User", back_populates="owned_projects")
     members = relationship("ProjectMember", back_populates="project")
-    data_sources = relationship("DataSource", back_populates="project")
+    data_sources = relationship("ProjectDataSource", back_populates="project")
     datasets = relationship("Dataset", back_populates="project")
     agents = relationship("Agent", back_populates="project")
     conversations = relationship("Conversation", back_populates="project")
@@ -84,17 +97,39 @@ class DataSource(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    project_id = Column(String(36), ForeignKey("project.id"), index=True)
     name = Column(String(100), nullable=False)
     type = Column(String(20), nullable=False)
     connection_config = Column(Text, nullable=False)
+    owner_id = Column(String(36), ForeignKey("user.id"))
     created_by = Column(String(36), ForeignKey("user.id"))
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    owner = relationship("User", foreign_keys=[owner_id], back_populates="owned_data_sources")
+    creator = relationship("User", foreign_keys=[created_by])
+    project_relations = relationship("ProjectDataSource", back_populates="data_source")
+
+
+class ProjectDataSource(Base):
+    """
+       表示 Project 使用的 Data Source，并指定该数据源在 Project 中的别名。
+       别名仅在当前 Project 上下文中有效。
+    """
+    __tablename__ = "project_data_source"
+
+    project_id = Column(String(36), ForeignKey("project.id"), primary_key=True, index=True)
+    data_source_id = Column(String(36), ForeignKey("data_source.id"), primary_key=True, index=True)
+    alias = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    # 添加联合唯一性约束
+    __table_args__ = (
+        UniqueConstraint('project_id', 'alias', name='uix_project_alias'),
+    )
+
     project = relationship("Project", back_populates="data_sources")
-    creator = relationship("User")
-    datasets = relationship("DatasetDataSource", back_populates="data_source")
+    data_source = relationship("DataSource", back_populates="project_relations")
+    datasets = relationship("DatasetProjectSource", back_populates="data_source")
 
 
 class Dataset(Base):
@@ -111,18 +146,20 @@ class Dataset(Base):
 
     project = relationship("Project", back_populates="datasets")
     creator = relationship("User")
-    data_sources = relationship("DatasetDataSource", back_populates="dataset")
+    data_sources = relationship("DatasetProjectSource", back_populates="dataset")
 
 
-class DatasetDataSource(Base):
-    __tablename__ = "dataset_data_source"
+class DatasetProjectSource(Base):
+    """
+       表示 Dataset 使用的项目内数据源。别名仅在当前项目上下文中有效。
+    """
+    __tablename__ = "dataset_project_source"
 
     dataset_id = Column(String(36), ForeignKey("dataset.id"), primary_key=True)
-    data_source_id = Column(String(36), ForeignKey("data_source.id"), primary_key=True)
-    alias = Column(String(100), nullable=False)
+    data_source_alias = Column(String(100), ForeignKey("project_data_source.alias"), primary_key=True)
 
     dataset = relationship("Dataset", back_populates="data_sources")
-    data_source = relationship("DataSource", back_populates="datasets")
+    data_source = relationship("ProjectDataSource", back_populates="datasets")
 
 
 class Agent(Base):
