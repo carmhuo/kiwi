@@ -32,8 +32,8 @@ class User(Base):
 
     user_roles = relationship("UserRole", back_populates="user")
     project_members = relationship("ProjectMember", back_populates="user")
-    owned_projects = relationship("Project", back_populates="owner")
-    owned_data_sources = relationship("DataSource", back_populates="owner")
+    owned_projects = relationship("Project", foreign_keys="Project.owner_id", back_populates="owner")
+    owned_data_sources = relationship("DataSource", foreign_keys="DataSource.owner_id", back_populates="owner")
     conversations = relationship("Conversation", back_populates="user")
 
 
@@ -99,9 +99,10 @@ class DataSource(Base):
                 index=True, unique=True, nullable=False)
     name = Column(String(100), nullable=False)
     type = Column(String(20), nullable=False)
+    description = Column(Text)
     connection_config = Column(Text, nullable=False)
-    owner_id = Column(String(36), ForeignKey("user.id"))
-    created_by = Column(String(36), ForeignKey("user.id"))
+    owner_id = Column(String(36), ForeignKey("user.id"), index=True)
+    created_by = Column(String(36), ForeignKey("user.id"), index=True)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 

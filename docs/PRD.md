@@ -604,13 +604,13 @@ graph LR
 
 ##### 角色表 (role)
 
-| 字段          | 类型          | 描述                                    | 约束                        |
-|:------------|:------------|:--------------------------------------|:--------------------------|
-| code        | INTEGER     | 角色代码, 0=系统管理员,1=项目管理员,2=数据分析师,99=普通用户 | PK, NOT NULL              |
-| name        | VARCHAR(50) | 角色名称                                  | UNIQUE, NOT NULL          |
-| description | TEXT        | 角色描述                                  |                           |
-| created_at  | TIMESTAMP   | 创建时间                                  | DEFAULT CURRENT_TIMESTAMP |
-| updated_at  | TIMESTAMP   | 更新时间                                  | DEFAULT CURRENT_TIMESTAMP |
+| 字段          | 类型          | 描述                                             | 约束                        |
+|:------------|:------------|:-----------------------------------------------|:--------------------------|
+| code        | INTEGER     | 角色代码, 0=系统管理员,1=项目管理员,2=数据源管理员,3=数据分析师,99=普通用户 | PK, NOT NULL              |
+| name        | VARCHAR(50) | 角色名称                                           | UNIQUE, NOT NULL          |
+| description | TEXT        | 角色描述                                           |                           |
+| created_at  | TIMESTAMP   | 创建时间                                           | DEFAULT CURRENT_TIMESTAMP |
+| updated_at  | TIMESTAMP   | 更新时间                                           | DEFAULT CURRENT_TIMESTAMP |
 
 ##### 用户角色关联表 (user_role)
 

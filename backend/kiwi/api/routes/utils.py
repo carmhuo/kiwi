@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic.networks import EmailStr
 
 from kiwi.api.deps import get_current_active_superuser
-from kiwi.api.schemas import Message
+from kiwi.schemas import Message
 from kiwi.utils import generate_test_email, send_email
 
 router = APIRouter(prefix="/utils", tags=["utils"])

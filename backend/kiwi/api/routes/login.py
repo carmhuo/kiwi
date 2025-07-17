@@ -9,7 +9,7 @@ from kiwi.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from kiwi.core import security
 from kiwi.core.config import settings
 from kiwi.core.security import get_password_hash
-from kiwi.api.schemas import Message, NewPassword, Token, UserResponse
+from kiwi.schemas import Message, NewPassword, Token, UserResponse
 from kiwi.crud.user import UserCRUD
 from kiwi.utils import (
     generate_password_reset_token,

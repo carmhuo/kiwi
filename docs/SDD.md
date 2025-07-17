@@ -357,21 +357,99 @@ def check_query_permission(user, dataset_id, sql):
 
 支持的数据源类型：
 
-- 关系数据库
-    - SQLite
-    - MySQL
-    - PostgreSQL
-- 数据仓库
-    - Impala
-    - Hive
-- OLAP引擎
-    - DuckDB
-    - StarRocks
-- 文件服务
-    - S3
-    - SFTP
+#### 关系数据库
+
+- SQLite
+
+```json
+
+```
+
+- MYSQL:
+
+```json
+  {
+  "host": "db.example.com",
+  "port": 3306,
+  "database": "sales",
+  "username": "admin",
+  "password": "******"
+}
+
+```
+
+- PostgreSQL:
+
+```json
+  {
+  "host": "db.example.com",
+  "port": 5432,
+  "database": "sales",
+  "username": "admin",
+  "password": "******"
+}
+```
+
+#### 数据仓库
+
+- Impala
+- Hive
+
+#### OLAP引擎
+
+- DuckDB
+- StarRocks
+
+#### 文件服务
+
+- S3
+
+```json
+  {
+  "endpoint": "https://s3.amazonaws.com",
+  "region": "us-west-2",
+  "bucket": "my-bucket",
+  "access_key": "AKIA1234567890",
+  "secret_key": "********"
+}
+```
+
+- SFTP
 
 ### 数据集管理
+
+#### 数据集创建
+
+1. 输入：数据集名称、项目 ID、数据源别名、表映射、字段筛选、表关系。
+2. 处理：
+    - 验证数据源是否存在。
+    - 验证数据源别名是否唯一。
+    - 将数据集配置保存为 JSON 格式。
+3. 输出：创建数据集并关联数据源。
+
+#### 数据集查询
+
+1. 输入：数据集 ID。
+2. 处理：
+    - 查询数据集配置。
+    - 解密数据源连接信息。
+3. 输出：返回数据集详情，包括数据源、表映射、表关系等信息。
+
+#### 数据集更新
+
+1. 输入：数据集 ID、更新字段。
+2. 处理：
+    - 更新数据集配置。
+    - 如果涉及数据源别名更新，确保别名唯一。
+3. 输出：返回更新后的数据集。
+
+#### 数据集删除
+
+1. 输入：数据集 ID。
+2. 处理：
+    - 删除数据集。
+    - 删除数据集与数据源的关联。
+3. 输出：确认数据集删除成功。
 
 ### Agent管理
 
@@ -599,6 +677,7 @@ graph TD
 ```
 
 时序图：
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -608,14 +687,12 @@ sequenceDiagram
     participant DuckDB
     participant CircuitBreaker as 熔断器
     participant RetryManager as 重试管理器
-    
     User ->> Frontend: 输入自然语言查询
     Frontend ->> Backend: POST /conversations/{id}/messages
-    
     Backend ->> RetryManager: 请求SQL生成（重试策略）
     RetryManager ->> Agent: 调用TEXT2SQL Agent
     Agent -->> RetryManager: 生成结果
-    
+
     alt 生成成功
         RetryManager -->> Backend: SQL语句
     else 生成失败
@@ -628,10 +705,10 @@ sequenceDiagram
             Frontend -->> User: 显示"智能解析失败，请重新表述"
         end
     end
-    
+
     Backend ->> CircuitBreaker: 请求执行SQL
     CircuitBreaker ->> DuckDB: 执行SQL查询
-    
+
     alt 执行成功
         DuckDB -->> CircuitBreaker: 查询结果
         CircuitBreaker -->> Backend: 结果数据
@@ -653,7 +730,7 @@ sequenceDiagram
             Frontend -->> User: 显示"系统繁忙，请稍后再试"
         end
     end
-    
+
     User ->> Frontend: 提交反馈（可选）
 ```
 

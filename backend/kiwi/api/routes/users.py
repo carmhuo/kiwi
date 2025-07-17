@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from kiwi.api.schemas import (
+from kiwi.schemas import (
     UserCreate,
     UserResponse,
     Message,

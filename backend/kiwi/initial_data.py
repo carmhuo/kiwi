@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiwi.core.database import AsyncSessionLocal
-from kiwi.api.schemas import UserCreate
+from kiwi.schemas import UserCreate
 from kiwi.crud.user import UserCRUD
 from kiwi.core.config import settings
 

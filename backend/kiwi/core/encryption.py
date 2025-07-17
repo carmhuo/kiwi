@@ -1,7 +1,8 @@
 import base64
 from cryptography.fernet import Fernet
 
-from kiwi_backend.config import settings
+from kiwi.core.config import settings
+
 
 # 数据加密与解密
 
@@ -13,12 +14,11 @@ def generate_key():
 def get_cipher_suite():
     """获取加密套件"""
     # 从配置获取密钥，如果没有则生成
-    if not hasattr(settings, 'ENCRYPTION_KEY') or not settings.ENCRYPTION_KEY:
+    if not hasattr(settings, 'SECRET_KEY') or not settings.SECRET_KEY:
         key = generate_key()
-        settings.ENCRYPTION_KEY = key.decode()
+        settings.SECRET_KEY = key.decode()
     else:
-        key = settings.ENCRYPTION_KEY.encode()
-
+        key = settings.SECRET_KEY.encode()
     return Fernet(key)
 
 

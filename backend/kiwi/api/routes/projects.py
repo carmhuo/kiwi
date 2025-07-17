@@ -1,10 +1,9 @@
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from kiwi.crud.project import ProjectCRUD
-from kiwi.api.schemas import (
+from kiwi.schemas import (
     ProjectResponse,
     ProjectsResponse,
     ProjectCreate,
@@ -148,7 +147,7 @@ async def add_project_member_with_role(
 
 
 @router.delete("/{project_id}")
-async def delete_item(
+async def delete_project(
         session: SessionDep, current_user: CurrentUser, project_id: str
 ) -> Message:
     """
