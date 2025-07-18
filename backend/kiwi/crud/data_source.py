@@ -1,10 +1,11 @@
 import json
 from enum import Enum
-from typing import Sequence, List, Optional
+from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import aliased
 
 from kiwi.core.database import BaseCRUD
+from kiwi.core.query_engine import FederatedQueryEngine
 from kiwi.models import DataSource, ProjectDataSource, User
 from kiwi.core.encryption import encrypt_data, decrypt_data
 from sqlalchemy import select, desc
@@ -15,7 +16,7 @@ from kiwi.schemas import DataSourceCreate, DataSourceUpdate
 
 class DataSourceType(str, Enum):
     MYSQL = "mysql"
-    POSTGRESQL = "postgresql"
+    POSTGRES = "postgres"
     S3 = "s3"
     SQLITE = "sqlite"
     LOCAL_FILE = "local_file"
@@ -85,9 +86,13 @@ class DataSourceCRUD(BaseCRUD):
 
         return data_sources
 
-    async def get_data_source(self, session: AsyncSession, data_source_id: str, user_id: str) -> Optional[DataSource]:
+    async def get_data_source(self, session: AsyncSession, data_source_id: str) -> Optional[DataSource]:
 
         return await self.get(session, data_source_id)
+
+    async def get_data_source_by_name(self, db: AsyncSession, source_name: str) -> User:
+        """根据用户名获取用户"""
+        return await self.get_by_field(db, "name", source_name)
 
     async def create_data_source(self, session: AsyncSession, data_source_create: DataSourceCreate,
                                  user_id: str, type: DataSourceType) -> DataSource:
@@ -96,13 +101,13 @@ class DataSourceCRUD(BaseCRUD):
 
         required_field_map = {
             DataSourceType.MYSQL: 'password',
-            DataSourceType.POSTGRESQL: 'password',
+            DataSourceType.POSTGRES: 'password',
             DataSourceType.S3: 'secret_key',
         }
 
         encrypted_field_map = {
             DataSourceType.MYSQL: 'encrypted_password',
-            DataSourceType.POSTGRESQL: 'encrypted_password',
+            DataSourceType.POSTGRES: 'encrypted_password',
             DataSourceType.S3: 'encrypted_secret_key',
         }
 
@@ -118,7 +123,7 @@ class DataSourceCRUD(BaseCRUD):
                 encrypted_value = encrypt_data(value)
                 connect_config[encrypted_name] = encrypted_value
             except Exception as e:
-                raise EncryptionError(f"Encryption failed for field '{field_name}': {e}")
+                raise ValueError(f"Encryption failed for field '{field_name}': {e}")
 
         elif type != DataSourceType.OTHERS:
             raise ValueError(f"Unsupported data source type: {type}")
@@ -140,47 +145,35 @@ class DataSourceCRUD(BaseCRUD):
         session.refresh(db_data_source)
         return db_data_source
 
-    async def delete_data_source(session: AsyncSession, project_id: str, data_source_id: str) -> None:
-        db_data_source = session.query(DataSource).filter(
-            DataSource.project_id == project_id,
-            DataSource.id == data_source_id
-        ).first()
-        if not db_data_source:
-            raise HTTPException(status_code=404, detail="Data source not found")
-        session.delete(db_data_source)
-        session.commit()
+    async def delete_data_source(session: AsyncSession, data_source_id: str) -> None:
+        pass
 
     async def test_connection(
             self,
             db: AsyncSession,
-            data_source_id: int
-    ):
+            data_source_id: Optional[str] = None,
+            data_source_in: Optional[DataSourceCreate] = None
+    ) -> Dict[str, Any]:
+        connection_config = None
+        source_type = None
         """测试数据源连接"""
-        data_source = await self.get_decrypted(db, data_source_id)
-        if not data_source:
-            return False
-
-        # 根据类型创建连接
-        db_type = data_source.type.lower()
-        try:
-            if db_type == "mysql":
-                import mysql.connector
-                conn = mysql.connector.connect(
-                    **data_source.connection_config
-                )
-                conn.close()
-                return True
-
-            elif db_type == "postgresql":
-                import psycopg2
-                conn = psycopg2.connect(
-                    **data_source.connection_config
-                )
-                conn.close()
-                return True
-
-            # 其他数据库类型...
-
-        except Exception as e:
-            print(f"连接测试失败: {str(e)}")
-            return False
+        if data_source_id:
+            data_source = await self.get_data_source(db, data_source_id)
+            if not data_source:
+                return {
+                    'status': False,
+                    'message': f"数据源不存在：{data_source_id}"
+                }
+            connection_config = json.loads(data_source.connection_config)
+            source_type = data_source.type
+        if data_source_in:
+            connection_config = data_source_in.connection_config
+            source_type = data_source_in.type
+        if not connection_config or not source_type:
+            return {
+                'status': False,
+                'message': "配置参数异常"
+            }
+        connection_config['password'] = decrypt_data(connection_config.pop('encrypted_password', None))
+        print(connection_config, source_type)
+        return FederatedQueryEngine().connection_test(connection_config, source_type)

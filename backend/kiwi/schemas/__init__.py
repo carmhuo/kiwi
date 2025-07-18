@@ -166,7 +166,7 @@ class DataSourceBase(BaseModel):
 
 
 class DataSourceBaseResponse(DataSourceBase):
-    id: str = uuid.UUID
+    id: uuid.UUID
     owner_name: str = Field(..., min_length=3, max_length=50, alias="owner_id")
     creator_name: str = Field(..., min_length=3, max_length=50, alias="created_by")
     created_at: datetime = Field(..., alias="created_at")

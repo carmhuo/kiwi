@@ -1,4 +1,6 @@
 import base64
+from typing import Optional
+
 from cryptography.fernet import Fernet
 
 from kiwi.core.config import settings
@@ -32,7 +34,7 @@ def encrypt_data(data: str) -> str:
     return base64.urlsafe_b64encode(encrypted).decode()
 
 
-def decrypt_data(encrypted_data: str) -> str:
+def decrypt_data(encrypted_data: Optional[str]) -> str:
     """解密数据"""
     if not encrypted_data:
         return encrypted_data
