@@ -1,26 +1,48 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, AsyncEngine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, text
 
 from kiwi.core.config import settings
 
-engine = create_async_engine(
-    settings.SQLALCHEMY_DATABASE_URI,
-    echo=settings.DEBUG,  # 开发时开启，生产环境关闭
-    future=True
-)
-# 异步会话工厂
-AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False
-)
+# 数据库引擎和会话工厂
+async_engine: AsyncEngine = None
+AsyncSessionLocal = None
+
+
+async def init_db():
+    """初始化数据库连接池"""
+    global async_engine, AsyncSessionLocal
+
+    # 创建异步引擎
+    async_engine = create_async_engine(
+        settings.SQLALCHEMY_DATABASE_URI,
+        echo=settings.DEBUG,
+        future=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT
+    )
+
+    # 创建会话工厂
+    AsyncSessionLocal = sessionmaker(
+        bind=async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False
+    )
+
+    # 测试连接
+    async with async_engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
 
 
 async def get_db_session():
     """获取异步数据库会话的上下文管理器"""
+    """获取数据库会话（依赖注入）"""
+    if AsyncSessionLocal is None:
+        await init_db()
+
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -30,6 +52,14 @@ async def get_db_session():
             raise
         finally:
             await session.close()
+
+
+async def close_db():
+    """关闭数据库连接池"""
+    global async_engine
+    if async_engine:
+        await async_engine.dispose()
+        async_engine = None
 
 
 Base = declarative_base()
@@ -79,8 +109,8 @@ class BaseCRUD:
         for field, value in obj_in.items():
             setattr(db_obj, field, value)
         db.add(db_obj)
-        await db.flush() # 发送更新到数据库，当前事务可见
-        await db.refresh(db_obj) # 刷新收发器
+        await db.flush()  # 发送更新到数据库，当前事务可见
+        await db.refresh(db_obj)  # 刷新收发器
         return db_obj
 
     async def delete(self, db: AsyncSession, id: str):

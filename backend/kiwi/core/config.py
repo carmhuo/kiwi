@@ -7,13 +7,14 @@ from pydantic import (
     BeforeValidator,
     EmailStr,
     HttpUrl,
-    PostgresDsn,
     computed_field,
     model_validator,
 )
 from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
+
+from kiwi.core.logger import Logger
 
 
 def parse_cors(v: Any) -> list[str] | str:
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+    APP_NAME: str = "Kiwi App"
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = secrets.token_urlsafe(32)
     # 60 minutes * 24 hours * 8 days = 8 days
@@ -81,6 +83,15 @@ class Settings(BaseSettings):
             return f"sqlite+aiosqlite:///{self.SQLITE_DB_PATH}"
         else:
             raise ValueError(f"Unsupported Database Type: {self.DATABASE_TYPE}")
+
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+
+    LOG_LEVEL: str = "DEBUG"
+    LOG_TO_FILE: bool = True
+    LOG_FILE_PATH: str = "logs/application.log"
+    LOG_FORMAT: str = "text" if ENVIRONMENT == "local" else "json"  # 或 "text"
 
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
@@ -151,3 +162,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()  # type: ignore
+
+logger = Logger(
+    name=settings.APP_NAME,
+    level=settings.LOG_LEVEL,
+    log_to_console=True,
+    log_to_file=settings.LOG_TO_FILE,
+    log_file_path=settings.LOG_FILE_PATH,
+    log_format=settings.LOG_FORMAT,
+    extra_fields={"app": settings.APP_NAME, "environment": settings.ENVIRONMENT}
+)
