@@ -1,7 +1,7 @@
-from typing import Sequence
+from typing import Sequence, List
 
 from kiwi.core.database import BaseCRUD
-from kiwi.models import Project, ProjectMember, UserRole
+from kiwi.models import Project, ProjectMember, UserRole, ProjectDataSource
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -137,3 +137,54 @@ class ProjectCRUD(BaseCRUD):
         from kiwi.crud.dataset import DatasetCRUD
         ds_crud = DatasetCRUD()
         return await ds_crud.get_multi(db, project_id=project_id)
+
+    async def bind_data_sources(
+            self,
+            db: AsyncSession,
+            project_id: str,
+            data_source_ids: List[str],
+            aliases: List[str]
+    ):
+        """
+        绑定一个或多个数据源到项目，并为每个数据源指定别名。
+
+        参数:
+            db (AsyncSession): 数据库会话
+            project_id (str): 项目ID
+            data_source_ids (List[str]): 数据源ID列表
+            aliases (List[str]): 数据源别名列表
+
+        返回:
+            List[ProjectDataSource]: 创建的 ProjectDataSource 对象列表
+        """
+        if len(data_source_ids) != len(aliases):
+            raise ValueError("数据源ID和别名的数量必须一致")
+
+        project = await self.get(db, id=project_id)
+        if not project:
+            raise ValueError("项目不存在")
+
+        created_relations = []
+
+        for data_source_id, alias in zip(data_source_ids, aliases):
+            # 检查是否已经绑定
+            stmt = select(ProjectDataSource).where(
+                ProjectDataSource.project_id == project_id,
+                ProjectDataSource.data_source_id == data_source_id
+            )
+            result = await db.execute(stmt)
+            existing = result.scalar_one_or_none()
+            if existing:
+                continue  # 跳过已存在的绑定
+
+            # 创建新的绑定关系
+            relation = ProjectDataSource(
+                project_id=project_id,
+                data_source_id=data_source_id,
+                alias=alias
+            )
+            db.add(relation)
+            created_relations.append(relation)
+
+        await db.flush()
+        return created_relations

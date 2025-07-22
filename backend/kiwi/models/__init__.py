@@ -140,10 +140,15 @@ class Dataset(Base):
                 index=True, unique=True, nullable=False)
     project_id = Column(String(36), ForeignKey("project.id"), index=True)
     name = Column(String(100), nullable=False)
+    description = Column(Text)
     configuration = Column(Text, nullable=False)
     created_by = Column(String(36), ForeignKey("user.id"))
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # __table_args__ = (
+    #     UniqueConstraint('project_id', 'name', name='uix_project_dataset_name'),
+    # )
 
     project = relationship("Project", back_populates="datasets")
     creator = relationship("User")

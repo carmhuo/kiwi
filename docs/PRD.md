@@ -638,6 +638,7 @@ graph LR
 | id                | VARCHAR(36)  | 主键UUID     | PK, AI                    |
 | name              | VARCHAR(100) | 数据源名称      | NOT NULL                  |
 | type              | VARCHAR(20)  | 数据库类型      | NOT NULL                  |
+| description       | TEXT         | 项目描述       |                           |
 | connection_config | TEXT         | 连接配置(JSON) | NOT NULL                  |
 | owner_id          | VARCHAR(36)  | 所有者ID      | FK → user(id)             |
 | created_by        | VARCHAR(36)  | 创建者ID      | FK → user(id)             |
@@ -677,6 +678,7 @@ graph LR
 | id            | VARCHAR(36)  | 主键UUID      | PK, AI                    |
 | project_id    | INTEGER      | 所属项目ID      | FK → project(id)          |
 | name          | VARCHAR(100) | 数据集名称       | NOT NULL                  |
+| description   | TEXT         | 数据描述        |                           |
 | configuration | TEXT         | 数据集配置(JSON) | NOT NULL                  |
 | created_by    | INTEGER      | 创建者ID       | FK → user(id)             |
 | created_at    | TIMESTAMP    | 创建时间        | DEFAULT CURRENT_TIMESTAMP |

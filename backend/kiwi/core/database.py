@@ -6,7 +6,7 @@ from kiwi.core.config import settings
 
 # 数据库引擎和会话工厂
 async_engine: AsyncEngine = None
-AsyncSessionLocal = None
+AsyncSessionLocal: sessionmaker = None
 
 
 async def init_db():
@@ -85,7 +85,15 @@ class BaseCRUD:
 
     async def get_by_field(self, db: AsyncSession, field: str, value):
         """根据字段值获取记录"""
-        stmt = select(self.model).where(getattr(self.model, field) == value)
+        stmt = select(self.model).where(getattr(self.model, field) == value)  # type: ignore
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    async def get_by_multi_field(self, db: AsyncSession, **filters):
+        """根据多个字段值获取记录"""
+        stmt = select(self.model)
+        for field, value in filters.items():
+            stmt = stmt.where(getattr(self.model, field) == value)  # type: ignore
         result = await db.execute(stmt)
         return result.scalars().first()
 
@@ -99,7 +107,7 @@ class BaseCRUD:
         """获取多条记录（带过滤）"""
         stmt = select(self.model)
         for field, value in filters.items():
-            stmt = stmt.where(getattr(self.model, field) == value)
+            stmt = stmt.where(getattr(self.model, field) == value)  # type: ignore
         stmt = stmt.offset(skip).limit(limit)
         result = await db.execute(stmt)
         return result.scalars().all()
@@ -115,7 +123,7 @@ class BaseCRUD:
 
     async def delete(self, db: AsyncSession, id: str):
         """删除记录"""
-        stmt = delete(self.model).where(self.model.id == id)
+        stmt = delete(self.model).where(self.model.id == id)  # type: ignore
         await db.execute(stmt)
         return True
 
@@ -123,6 +131,6 @@ class BaseCRUD:
         """获取表记录总数（可带过滤条件）"""
         stmt = select(func.count()).select_from(self.model)
         for field, value in filters.items():
-            stmt = stmt.where(getattr(self.model, field) == value)
+            stmt = stmt.where(getattr(self.model, field) == value)  # type: ignore
         result = await db.execute(stmt)
         return result.scalar() or 0

@@ -81,6 +81,13 @@ class UsersResponse(BaseModel):
     count: int
 
 
+class UserResponseDetail(UserBase):
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+    role_codes: List[int] = []
+
+
 class ProjectMemberBase(BaseModel):
     project_id: uuid.UUID
     user_id: uuid.UUID
@@ -243,7 +250,34 @@ class S3Update(S3Connection):
 class S3Response(DataSourceBaseResponse):
     connection_config: S3ConnectionWithoutSecretKey
 
+
 # 数据集
+class DatasetCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    project_id: str
+    description: Optional[str] = None
+    data_source_aliases: List[str] = Field(..., min_items=1)
+    configuration: Dict[str, Any] = Field(..., description="including tables/relationships")
+
+
+class DatasetResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    data_source_aliases: List[str]
+    configuration: str
+    created_by: str
+    creator_name: str = Field(..., min_length=3, max_length=50)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DatasetsResponse(BaseModel):
+    data: List[DatasetResponse]
+    count: int
+
 # class TableMapping(BaseModel):
 #     source_alias: str
 #     source_table: str

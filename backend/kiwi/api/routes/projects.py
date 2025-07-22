@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -144,6 +144,44 @@ async def add_project_member_with_role(
     )
 
     return Message(message="User added to the project with specified role successfully")
+
+
+@router.post("/{project_id}/bind-data-sources")
+async def bind_data_sources(
+        session: SessionDep,
+        current_user: CurrentUser,
+        project_id: str,
+        data_source_ids: List[str],
+        aliases: Optional[List[str]] = None
+
+) -> Message:
+    """
+    绑定一个或多个数据源到项目，并为每个数据源指定别名（若未提供则使用默认别名）。
+
+    参数:
+        db (AsyncSession): 数据库会话
+        project_id (str): 项目ID
+        data_source_ids (List[str]): 数据源ID列表
+        aliases (Optional[List[str]]): 数据源别名列表（可选）
+
+    返回:
+        List[ProjectDataSource]: 创建的 ProjectDataSource 对象列表
+    """
+    if aliases is None:
+        # 若未提供别名，则使用 data_source_id 作为默认值
+        aliases = data_source_ids
+
+    if len(data_source_ids) != len(aliases):
+        raise ValueError("数据源ID和别名的数量必须一致")
+
+    await ProjectCRUD().bind_data_sources(
+        session,
+        project_id=project_id,
+        data_source_ids=data_source_ids,
+        aliases=aliases
+    )
+
+    return Message(message="Data source bind successfully")
 
 
 @router.delete("/{project_id}")
