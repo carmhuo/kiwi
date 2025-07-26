@@ -89,7 +89,7 @@ class BaseCRUD:
         result = await db.execute(stmt)
         return result.scalars().first()
 
-    async def get_by_multi_field(self, db: AsyncSession, **filters):
+    async def get_by_fields(self, db: AsyncSession, **filters):
         """根据多个字段值获取记录"""
         stmt = select(self.model)
         for field, value in filters.items():

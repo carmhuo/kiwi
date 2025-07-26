@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Annotated, List
 
 import jwt
@@ -7,17 +8,21 @@ from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiwi.core import security
+from kiwi.core.security.auth_utils import ALGORITHM
+from kiwi.core.cache import CacheManager, Cache
 from kiwi.core.config import settings
 from kiwi.core.database import get_db_session
+from kiwi.crud.project import ProjectCRUD
 from kiwi.crud.user import UserCRUD
 from kiwi.models import User, Role
+
+# 定义数据库会话依赖
+SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/login/access-token"
 )
 
-SessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 TokenDep = Annotated[str, Depends(reusable_oauth2)]
 
 
@@ -45,7 +50,7 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
     )
     try:
         payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[ALGORITHM]
         )
         user_id: str = payload.get("sub")
         if user_id is None:
@@ -61,6 +66,7 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
     return user
 
 
+# 定义认证用户依赖
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
@@ -96,3 +102,37 @@ async def get_user_roles(db: AsyncSession, user_id: str) -> List[int]:
     # 查询用户拥有的所有角色
     roles = await UserCRUD().get_user_roles(db, user_id)
     return [role.code for role in roles]
+
+
+async def verify_project_member(db: SessionDep,
+                                current_user: CurrentUser,
+                                project_id: str) -> bool:
+    # 系统管理员拥有所有权限
+    if current_user.is_superuser:
+        return True
+
+    # 检查项目成员
+    member = await ProjectCRUD().get_project_member(db, project_id, current_user.id)
+    if not member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="用户不是项目成员"
+        )
+
+    # 普通用户只能访问对话
+    if member.role_code == 99:  # 普通用户
+        return True
+
+    # 其他角色有完全访问权限
+    return True
+
+
+# 定义项目成员验证依赖
+ProjectMember = Annotated[bool, Depends(verify_project_member)]
+
+
+# 依赖项：获取缓存实例
+async def get_cache() -> Cache:
+    return await CacheManager.get_cache()
+
+CacheDep = Annotated[Cache, Depends(get_cache)]

@@ -1,4 +1,7 @@
-from typing import Sequence, List
+from typing import Sequence, List, Optional
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
 from kiwi.core.database import BaseCRUD
 from kiwi.models import Project, ProjectMember, UserRole, ProjectDataSource
@@ -82,6 +85,22 @@ class ProjectCRUD(BaseCRUD):
         result = await db.execute(stmt)
         return result.scalars().all()
 
+    async def get_project_member(self, db, project_id, user_id) -> Optional[ProjectMember]:
+        """
+            根据项目ID和成员ID获取项目成员信息。
+
+            :param db: 数据库会话
+            :param project_id: 项目唯一标识
+            :param user_id: 成员唯一标识（用户ID）
+            :return: ProjectMember 对象或 None
+            """
+        stmt = select(ProjectMember).where(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
     async def get_user_projects(
             self,
             db: AsyncSession,
@@ -111,20 +130,26 @@ class ProjectCRUD(BaseCRUD):
         """根据项目名称检索项目"""
         return await self.get_by_field(db, "name", project_name)
 
-    async def get_project_details(self, db: AsyncSession, project_id: str):
+    async def get_project_by_id(self, db: AsyncSession, project_id: str) -> Project:
+        """根据项目ID检索项目"""
+        return await self.get(db, id=project_id)
+
+    async def get_project_details(self, db: AsyncSession, project_id: str) -> Optional[Project]:
         """获取项目详细信息，包括成员、数据源、数据集等"""
-        project = await self.get(db, id=project_id)
-
-        members = await self.get_project_members(db, project_id=project_id)
-        data_sources = await self.get_project_data_sources(db, project_id=project_id)
-        datasets = await self.get_project_datasets(db, project_id=project_id)
-
-        return {
-            "project": project,
-            "members": members,
-            "data_sources": data_sources,
-            "datasets": datasets
-        }
+        if not project_id:
+            raise ValueError("project_id 不能为空")
+        try:
+            result = await db.execute(
+                select(Project)
+                .options(selectinload(Project.members))
+                .options(selectinload(Project.data_sources))
+                .options(selectinload(Project.datasets))
+                .where(Project.id == project_id)
+            )
+            return result.scalars().first()
+        except SQLAlchemyError as e:
+            # 可根据实际需求记录日志
+            raise RuntimeError(f"数据库操作失败: {str(e)}") from e
 
     async def get_project_data_sources(self, db: AsyncSession, project_id: str):
         """获取项目下的所有数据源"""

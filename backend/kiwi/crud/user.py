@@ -4,7 +4,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiwi.core.database import BaseCRUD
-from kiwi.core.security import verify_password, get_password_hash
+from kiwi.core.security.auth_utils import verify_password, get_password_hash
 from kiwi.models import User, UserRole, Role, ProjectMember
 
 

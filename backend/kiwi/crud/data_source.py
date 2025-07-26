@@ -3,26 +3,17 @@ from enum import Enum
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import aliased
+from websockets.headers import parse_connection
 
 from kiwi.core.database import BaseCRUD
-from kiwi.core.query_engine import FederatedQueryEngine
+from kiwi.core.services.federation_query_engine import FederationQueryEngine
 from kiwi.models import DataSource, ProjectDataSource, User
 from kiwi.core.encryption import encrypt_data, decrypt_data
+from kiwi.core.services.datasource_utils import DataSourceType, decrypt_connection_config, encrypt_connection_config
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiwi.schemas import DataSourceCreate, DataSourceUpdate
-
-
-class DataSourceType(str, Enum):
-    MYSQL = "mysql"
-    POSTGRES = "postgres"
-    S3 = "s3"
-    SQLITE = "sqlite"
-    LOCAL_FILE = "local_file"
-    DUCK_DB = "duckdb"
-    OTHERS = "others"
-
+from kiwi.schemas import DataSourceCreate, DataSourceUpdate, DataSourceConnection
 
 class DataSourceCRUD(BaseCRUD):
     def __init__(self):
@@ -97,40 +88,13 @@ class DataSourceCRUD(BaseCRUD):
     async def create_data_source(self, session: AsyncSession, data_source_create: DataSourceCreate,
                                  user_id: str, type: DataSourceType) -> DataSource:
 
-        connect_config = dict(data_source_create.connection_config)
+        connect_config = data_source_create.connection_config
 
-        required_field_map = {
-            DataSourceType.MYSQL: 'password',
-            DataSourceType.POSTGRES: 'password',
-            DataSourceType.S3: 'secret_key',
-        }
-
-        encrypted_field_map = {
-            DataSourceType.MYSQL: 'encrypted_password',
-            DataSourceType.POSTGRES: 'encrypted_password',
-            DataSourceType.S3: 'encrypted_secret_key',
-        }
-
-        if type in required_field_map:
-            field_name = required_field_map[type]
-            encrypted_name = encrypted_field_map[type]
-
-            value = connect_config.pop(field_name, None)
-            if value is None:
-                raise ValueError(f"Missing '{field_name}' field for database type: {type}")
-
-            try:
-                encrypted_value = encrypt_data(value)
-                connect_config[encrypted_name] = encrypted_value
-            except Exception as e:
-                raise ValueError(f"Encryption failed for field '{field_name}': {e}")
-
-        elif type != DataSourceType.OTHERS:
-            raise ValueError(f"Unsupported data source type: {type}")
+        config = encrypt_connection_config(type, connect_config)
 
         data_source_dict = data_source_create.model_dump()
         data_source_dict.update({
-            "connection_config": json.dumps(connect_config, ensure_ascii=False),
+            "connection_config": config,
             "owner_id": user_id,
             "created_by": user_id
         })
@@ -139,7 +103,7 @@ class DataSourceCRUD(BaseCRUD):
 
     async def update_data_source(session: AsyncSession, db_data_source: DataSource,
                                  data_source_update: DataSourceUpdate) -> DataSource:
-        for key, value in data_source_update.dict(exclude_unset=True).items():
+        for key, value in data_source_update.model_dump(exclude_unset=True).items():
             setattr(db_data_source, key, value)
         session.commit()
         session.refresh(db_data_source)
@@ -152,10 +116,8 @@ class DataSourceCRUD(BaseCRUD):
             self,
             db: AsyncSession,
             data_source_id: Optional[str] = None,
-            data_source_in: Optional[DataSourceCreate] = None
+            connection: Optional[DataSourceConnection] = None
     ) -> Dict[str, Any]:
-        connection_config = None
-        source_type = None
         """测试数据源连接"""
         if data_source_id:
             data_source = await self.get_data_source(db, data_source_id)
@@ -164,16 +126,20 @@ class DataSourceCRUD(BaseCRUD):
                     'status': False,
                     'message': f"数据源不存在：{data_source_id}"
                 }
-            connection_config = json.loads(data_source.connection_config)
+            config = data_source.connection_config
             source_type = data_source.type
-        if data_source_in:
-            connection_config = data_source_in.connection_config
-            source_type = data_source_in.type
-        if not connection_config or not source_type:
+        elif connection:
+            config = connection.connection_config
+            source_type = connection.type
+        else:
             return {
                 'status': False,
                 'message': "配置参数异常"
             }
-        connection_config['password'] = decrypt_data(connection_config.pop('encrypted_password', None))
-        print(connection_config, source_type)
-        return FederatedQueryEngine().connection_test(connection_config, source_type)
+        try:
+            source_type = DataSourceType(source_type.strip().lower())
+        except ValueError:
+            raise ValueError("Invalid data source type")
+        config = await decrypt_connection_config(source_type, config)
+        print(config, source_type.value)
+        return await FederationQueryEngine.connection_activity_test(config, source_type.value)

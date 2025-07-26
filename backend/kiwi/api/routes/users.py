@@ -13,7 +13,7 @@ from kiwi.schemas import (
     UserUpdateMe,
     UpdatePassword,
     UserRegister)
-from kiwi.core.security import verify_password, get_password_hash
+from kiwi.core.security.auth_utils import verify_password, get_password_hash
 from kiwi.crud.user import UserCRUD
 from kiwi.api.deps import (
     CurrentUser,

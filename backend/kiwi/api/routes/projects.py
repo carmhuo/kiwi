@@ -62,15 +62,15 @@ async def read_project_detail(
             detail="The user is not a member of the project"
         )
 
-    project_details = await ProjectCRUD().get_project_details(session, project_id=project_id)
-    if not project_details:
+    project = await ProjectCRUD().get_project_details(session, project_id=project_id)
+    if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
     return ProjectDetail(
-        project=project_details["project"],
-        members=project_details["members"],
-        data_sources=project_details["data_sources"],
-        datasets=project_details["datasets"]
+        project=project,
+        members=project.members,
+        data_sources=project.data_sources,
+        datasets=project.datasets
     )
 
 

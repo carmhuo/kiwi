@@ -1,3 +1,5 @@
+import json
+
 from sqlalchemy import (
     Column,
     Integer,
@@ -7,7 +9,9 @@ from sqlalchemy import (
     ForeignKey,
     TIMESTAMP,
     Float,
-    UniqueConstraint
+    UniqueConstraint,
+    TypeDecorator,
+    JSON
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -15,6 +19,20 @@ from sqlalchemy.ext.declarative import declarative_base
 import uuid
 
 Base = declarative_base()
+
+
+class JSONEncodedDict(TypeDecorator):
+    impl = Text
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps(value, ensure_ascii=False)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = json.loads(value)
+        return value
 
 
 class User(Base):
@@ -64,7 +82,7 @@ class Project(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)
     description = Column(Text)
     owner_id = Column(String(36), ForeignKey("user.id"))
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
@@ -97,10 +115,10 @@ class DataSource(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)
     type = Column(String(20), nullable=False)
     description = Column(Text)
-    connection_config = Column(Text, nullable=False)
+    connection_config = Column(JSON, nullable=False)
     owner_id = Column(String(36), ForeignKey("user.id"), index=True)
     created_by = Column(String(36), ForeignKey("user.id"), index=True)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
@@ -139,9 +157,9 @@ class Dataset(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
     project_id = Column(String(36), ForeignKey("project.id"), index=True)
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)
     description = Column(Text)
-    configuration = Column(Text, nullable=False)
+    configuration = Column(JSON, nullable=False)
     created_by = Column(String(36), ForeignKey("user.id"))
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
@@ -174,10 +192,11 @@ class Agent(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
     project_id = Column(String(36), ForeignKey("project.id"))
-    name = Column(String(100), nullable=False)
+    name = Column(String(100), nullable=False, unique=True)
     type = Column(String(20), nullable=False)
-    config = Column(Text, nullable=False)
+    config = Column(JSONEncodedDict, nullable=False)
     created_by = Column(String(36), ForeignKey("user.id"))
+    is_active = Column(Boolean, default=True)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
@@ -193,7 +212,7 @@ class AgentVersion(Base):
                 index=True, unique=True, nullable=False)
     agent_id = Column(String(36), ForeignKey("agent.id"))
     version = Column(String(20), nullable=False)
-    config = Column(Text, nullable=False)
+    config = Column(JSON, nullable=False)
     checksum = Column(String(64), nullable=False)
     created_by = Column(String(36), ForeignKey("user.id"))
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
@@ -202,6 +221,7 @@ class AgentVersion(Base):
     agent = relationship("Agent", back_populates="versions")
     creator = relationship("User")
     metrics = relationship("AgentMetric", back_populates="version")
+    messages = relationship("Message", back_populates="agent_version")
 
 
 class AgentMetric(Base):
@@ -239,16 +259,19 @@ class Message(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()),
                 index=True, unique=True, nullable=False)
     conversation_id = Column(String(36), ForeignKey("conversation.id"))
+    agent_version_id = Column(String(36), ForeignKey("agent_version.id"))
     content = Column(Text, nullable=False)
     role = Column(String(10), nullable=False)  # user/assistant
     sql_query = Column(Text)
-    report_data = Column(Text)  # JSON格式
-    feedback_type = Column(Integer)  # 1=正确, 0=错误, 2=部分正确, 3=建议改进
+    raw_data = Column(JSON)  # 原始查询结果
+    report_data = Column(JSON)  # 图表配置, JSON格式
+    feedback_type = Column(Integer)  # 0=错误, 1=正确, 2=部分正确, 3=建议改进
     feedback_text = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     conversation = relationship("Conversation", back_populates="messages")
+    agent_version = relationship("AgentVersion", back_populates="messages")
 
 
 class AuditLog(Base):
@@ -259,8 +282,8 @@ class AuditLog(Base):
     action = Column(String(20), nullable=False)  # e.g., CREATE, UPDATE, DELETE
     target_type = Column(String(30), nullable=False)  # e.g., DATASOURCE, AGENT
     target_id = Column(String(36))
-    old_value = Column(Text)  # JSON格式
-    new_value = Column(Text)  # JSON格式
+    old_value = Column(JSON)  # JSON格式
+    new_value = Column(JSON)  # JSON格式
     ip_address = Column(String(45))  # Using String for IPv4/v6 compatibility
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
 

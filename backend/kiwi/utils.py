@@ -1,19 +1,16 @@
-import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, Callable, Coroutine
 
 import emails  # type: ignore
 import jwt
 from jinja2 import Template
 from jwt.exceptions import InvalidTokenError
 
-from kiwi.core import security
-from kiwi.core.config import settings
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from kiwi.core.security.auth_utils import ALGORITHM
+from kiwi.core.config import settings, logger
 
 
 @dataclass
@@ -24,17 +21,17 @@ class EmailData:
 
 def render_email_template(*, template_name: str, context: dict[str, Any]) -> str:
     template_str = (
-        Path(__file__).parent / "email-templates" / "build" / template_name
+            Path(__file__).parent / "email-templates" / "build" / template_name
     ).read_text()
     html_content = Template(template_str).render(context)
     return html_content
 
 
 def send_email(
-    *,
-    email_to: str,
-    subject: str = "",
-    html_content: str = "",
+        *,
+        email_to: str,
+        subject: str = "",
+        html_content: str = "",
 ) -> None:
     assert settings.emails_enabled, "no provided configuration for email variables"
     message = emails.Message(
@@ -83,7 +80,7 @@ def generate_reset_password_email(email_to: str, username: str, token: str) -> E
 
 
 def generate_new_account_email(
-    email_to: str, username: str, password: str
+        email_to: str, username: str, password: str
 ) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - New account for user {username}"
@@ -108,7 +105,7 @@ def generate_password_reset_token(user_id: str) -> str:
     encoded_jwt = jwt.encode(
         {"exp": exp, "nbf": now, "sub": user_id},
         settings.SECRET_KEY,
-        algorithm=security.ALGORITHM,
+        algorithm=ALGORITHM,
     )
     return encoded_jwt
 
@@ -116,8 +113,51 @@ def generate_password_reset_token(user_id: str) -> str:
 def verify_password_reset_token(token: str) -> str | None:
     try:
         decoded_token = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+            token, settings.SECRET_KEY, algorithms=[ALGORITHM]
         )
         return str(decoded_token["sub"])
     except InvalidTokenError:
         return None
+
+
+T = TypeVar('T')
+
+
+def measure_time(func: Callable[..., T]) -> Callable[..., T]:
+    """
+    计算函数执行时间的装饰器
+
+    用法:
+        @measure_time
+        def my_function():
+            ...
+    """
+
+    def wrapper(*args, **kwargs) -> T:
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed_time = time.perf_counter() - start_time
+        logger.info(f"Function '{func.__name__}' took {elapsed_time:.4f} seconds")
+        return result
+
+    return wrapper
+
+
+def async_measure_time(func: Callable[..., Coroutine[Any, Any, T]]) -> Callable[..., Coroutine[Any, Any, T]]:
+    """
+    计算异步函数执行时间的装饰器
+
+    用法:
+        @async_measure_time
+        async def my_async_function():
+            await some_operation()
+    """
+
+    async def wrapper(*args, **kwargs) -> T:
+        start_time = time.perf_counter()
+        result = await func(*args, **kwargs)
+        elapsed_time = time.perf_counter() - start_time
+        await logger.info(f"Async function '{func.__name__}' took {elapsed_time:.4f} seconds")
+        return result
+
+    return wrapper

@@ -66,7 +66,7 @@ async def safe_encrypt(data: str) -> str:
     try:
         return await run_in_threadpool(encrypt_data, data)
     except Exception as e:
-        logger.aerror(f"Encryption failed", extra={"error": str(e)})
+        await logger.aerror(f"Encryption failed", extra={"error": str(e)})
         raise ValueError("Data encryption error") from e
 
 
@@ -75,5 +75,5 @@ async def safe_decrypt(encrypted_data: Optional[str]) -> str:
     try:
         return await run_in_threadpool(decrypt_data, encrypted_data)
     except Exception as e:
-        logger.aerror(f"Decryption failed", extra={"error": str(e)})
+        await logger.aerror(f"Decryption failed", extra={"error": str(e)})
         raise ValueError("Data decryption error") from e

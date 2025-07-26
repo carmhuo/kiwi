@@ -1,100 +1,196 @@
-from kiwi_backend.database import BaseCRUD
-from kiwi_backend.models import Agent, AgentVersion, AgentMetric
-from sqlalchemy import select, func
+import hashlib
+import json
+import re
+from typing import Optional, Sequence
+
+from kiwi.core.database import BaseCRUD
+from kiwi.core.monitoring import track_errors, AGENT_ERRORS
+from kiwi.models import Agent, AgentVersion, AgentMetric
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
+
+from sqlalchemy.orm import selectinload
+
+AGENT_INIT_VERSION = "v1.0.0"
 
 
 class AgentCRUD(BaseCRUD):
     def __init__(self):
         super().__init__(Agent)
 
-    async def create_with_version(
-            self,
-            db: AsyncSession,
-            agent_data: dict,
-            version_data: dict
-    ):
-        """创建Agent并添加初始版本"""
-        agent = await self.create(db, agent_data)
+    @track_errors(AGENT_ERRORS)
+    async def create_agent(
+            self, db: AsyncSession, agent_data: dict, user_id: str
+    ) -> Agent:
+        # 生成配置校验和
+        config_str = json.dumps(agent_data["config"], sort_keys=True)
+        checksum = hashlib.sha256(config_str.encode()).hexdigest()
+
+        db_agent = Agent(
+            **agent_data,
+            created_by=user_id,
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
 
         # 创建初始版本
-        await self.create_version(
-            db,
-            agent_id=agent.id,
-            version_data=version_data
-        )
-        return agent
-
-    async def create_version(
-            self,
-            db: AsyncSession,
-            agent_id: int,
-            version_data: dict
-    ):
-        """创建Agent新版本"""
-        # 获取当前版本号
-        stmt = select(func.max(AgentVersion.version)).where(
-            AgentVersion.agent_id == agent_id
-        )
-        result = await db.execute(stmt)
-        max_version = result.scalar_one_or_none()
-
-        # 生成新版本号
-        if max_version:
-            major, minor, patch = map(int, max_version.split('.'))
-            new_version = f"{major}.{minor}.{patch + 1}"
-        else:
-            new_version = "1.0.0"
-
-        # 创建版本记录
-        version = AgentVersion(
-            agent_id=agent_id,
-            version=new_version,
-            config=version_data["config"],
-            checksum=version_data["checksum"],
-            created_by=version_data["created_by"],
+        initial_version = AgentVersion(
+            agent=db_agent,
+            version=AGENT_INIT_VERSION,
+            config=agent_data["config"],
+            checksum=checksum,
+            created_by=user_id,
             is_current=True
         )
-        db.add(version)
+
+        db.add(db_agent)
+        db.add(initial_version)
         await db.flush()
+        await db.refresh(db_agent)
+        # 添加审计
+        # await audit_log(
+        #     action="CREATE",
+        #     target_type="AGENT",
+        #     target_id=db_agent.id,
+        #     user_id=user_id
+        # )
+        return db_agent
 
-        # 将其他版本标记为非当前
-        stmt = update(AgentVersion).where(
-            AgentVersion.agent_id == agent_id,
-            AgentVersion.id != version.id
-        ).values(is_current=False)
-        await db.execute(stmt)
+    async def get_agent(self, db: AsyncSession, agent_id: str) -> Optional[Agent]:
+        result = await db.execute(
+            select(Agent)
+            .options(selectinload(Agent.versions))
+            .where(Agent.id == agent_id)
+        )
+        return result.scalars().first()
 
-        return version
+    async def update_agent(
+            self, db: AsyncSession, agent_id: str, update_data: dict, user_id: str
+    ) -> Optional[Agent]:
+        # 获取当前Agent
+        agent = await self.get_agent(db, agent_id)
+        if not agent:
+            return None
+
+        # 如果配置变更则创建新版本
+        if "config" in update_data:
+            config_str = json.dumps(update_data["config"], sort_keys=True)
+            new_checksum = hashlib.sha256(config_str.encode()).hexdigest()
+
+            # 查找最新版本
+            latest_version = max(agent.versions, key=lambda v: v.created_at)
+
+            # 仅当配置变更时创建新版本
+            if new_checksum != latest_version.checksum:
+                # 生成新版本号 (自动递增小版本)
+                major, minor, patch = latest_version.version[1:].split(".")
+                new_version = f"v{major}.{minor}.{int(patch) + 1}"
+
+                # 创建新版本
+                new_version = AgentVersion(
+                    agent_id=agent_id,
+                    version=new_version,
+                    config=update_data["config"],
+                    checksum=new_checksum,
+                    created_by=user_id,
+                    is_current=True
+                )
+
+                # 将旧版本标记为非当前
+                await db.execute(
+                    update(AgentVersion)
+                    .where(AgentVersion.agent_id == agent_id)
+                    .values(is_current=False)
+                )
+
+                db.add(new_version)
+                update_data["updated_at"] = datetime.now()
+            # 更新Agent基础信息
+            # await db.execute(
+            #     update(Agent)
+            #     .where(Agent.id == agent_id)
+            #     .values(**update_data)
+            # )
+        return await self.update(db, agent, update_data)
 
     async def rollback_version(
-            self,
-            db: AsyncSession,
-            agent_id: int,
-            target_version: str
-    ):
-        """回滚到指定版本"""
+            self, db: AsyncSession, agent_id: str, version: str, user_id: str
+    ) -> Optional[Agent]:
         # 获取目标版本
-        stmt = select(AgentVersion).where(
-            AgentVersion.agent_id == agent_id,
-            AgentVersion.version == target_version
+        result = await db.execute(
+            select(AgentVersion)
+            .where(
+                (AgentVersion.agent_id == agent_id) &
+                (AgentVersion.version == version)
+            )
         )
-        result = await db.execute(stmt)
-        target = result.scalar_one_or_none()
+        target_version = result.scalars().first()
 
-        if not target:
-            raise ValueError(f"版本 {target_version} 不存在")
+        if not target_version:
+            return None
+        next_version = await self.get_next_version(db, agent_id)
+        # 创建回滚版本 (使用原始配置)
+        rollback_version = AgentVersion(
+            agent_id=agent_id,
+            version=next_version,
+            config=target_version.config,
+            checksum=target_version.checksum,
+            created_by=user_id,
+            is_current=True
+        )
 
-        # 创建新版本（复制目标版本配置）
-        new_version_data = {
-            "config": target.config,
-            "checksum": target.checksum,
-            "created_by": target.created_by
-        }
-        return await self.create_version(db, agent_id, new_version_data)
+        # 将旧版本标记为非当前
+        await db.execute(
+            update(AgentVersion)
+            .where(AgentVersion.agent_id == agent_id)
+            .values(is_current=False)
+        )
+
+        # 更新Agent配置
+        await db.execute(
+            update(Agent)
+            .where(Agent.id == agent_id)
+            .values(config=target_version.config)
+        )
+
+        db.add(rollback_version)
+        await db.flush()
+        return await self.get_agent(db, agent_id)
+
+    async def get_next_version(self, db: AsyncSession, agent_id: str) -> Optional[str]:
+        result = await db.execute(
+            select(func.max(AgentVersion.version))
+            .where(AgentVersion.agent_id == agent_id)
+        )
+        latest_version = result.scalar_one_or_none()
+        if not latest_version:
+            return AGENT_INIT_VERSION
+
+        # 使用正则确保版本号格式正确
+        match = re.match(r"^v(\d+)\.(\d+)\.(\d+)$", latest_version)
+        if not match:
+            # 可选：抛出异常或记录日志
+            return None
+
+        major, minor, patch = match.groups()
+        new_version = f"v{major}.{minor}.{int(patch) + 1}"
+        return new_version
 
     async def record_metric(
+            self, db: AsyncSession, version_id: str, metric_data: dict
+    ) -> AgentMetric:
+        db_metric = AgentMetric(
+            version_id=version_id,
+            **metric_data,
+            created_at=datetime.now()
+        )
+        db.add(db_metric)
+        await db.flush()
+        await db.refresh(db_metric)
+        return db_metric
+
+    async def calculate_metric(
             self,
             db: AsyncSession,
             version_id: int,
@@ -130,3 +226,32 @@ class AgentCRUD(BaseCRUD):
         db.add(metric)
         await db.flush()
         return metric
+
+    async def get_active_agent(self, db, project_id, agent_type):
+        return self.get_by_fields(db, project_id=project_id, agent_type=agent_type, is_active=True)
+
+    async def get_agent_by_name(self, db, name) -> Optional[Agent]:
+        result = await db.execute(
+            select(Agent)
+            .where(Agent.name == name)
+        )
+        return result.scalars().first()
+
+    async def list_agents(self, db, project_id, skip, limit):
+        return await self.get_multi(db, skip, limit, project_id=project_id)
+
+    async def list_agent_versions(self, db, agent_id, skip, limit):
+        result = await db.execute(
+            select(AgentVersion)
+            .where(AgentVersion.agent_id == agent_id)
+            .order_by(AgentVersion.version.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    async def count_agent_versions(self, db, agent_id):
+        stmt = (select(func.count()).select_from(AgentVersion)
+                .where(AgentVersion.agent_id == agent_id))  # type: ignore
+        result = await db.execute(stmt)
+        return result.scalar() or 0

@@ -14,7 +14,7 @@ class DatasetCRUD(BaseCRUD):
         super().__init__(Dataset)
 
     async def get_dataset_by_name(self, db, project_id, name):
-        return await self.get_by_multi_field(db, project_id=project_id, name=name)
+        return await self.get_by_fields(db, project_id=project_id, name=name)
 
     async def get_datasets_by_project(
             self,

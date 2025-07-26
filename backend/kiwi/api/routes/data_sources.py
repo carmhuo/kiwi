@@ -8,7 +8,9 @@ from kiwi.schemas import (
     DataSourceResponse,
     DataSourcesResponse,
     DataSourceCreate,
-    DataSourceUpdate, Message,
+    DataSourceUpdate,
+    DataSourceConnection,
+    Message,
 )
 from kiwi.api.deps import (
     CurrentUser,
@@ -50,7 +52,7 @@ async def read_data_sources_me(
     return DataSourcesResponse(data=data_sources, count=count)
 
 
-@router.get("/project/{project_id}", response_model=DataSourceResponse)
+@router.get("/project/{project_id}", response_model=DataSourcesResponse)
 async def read_data_sources_by_project(
         session: SessionDep,
         current_user: CurrentUser,
@@ -61,7 +63,10 @@ async def read_data_sources_by_project(
     """
     Get all data sources in a project.
     """
-    return await DataSourceCRUD.list_data_sources_by_project(session, project_id, skip, limit)
+    crud = DataSourceCRUD()
+    count = await crud.count(session)
+    sources = await crud.list_data_sources_by_project(session, project_id, skip, limit)
+    return DataSourcesResponse(data=sources, count=count)
 
 
 @router.get("/{data_source_id}", response_model=DataSourceResponse)
@@ -155,14 +160,14 @@ async def data_source_activity(
     return activity
 
 
-@router.post("/activity", response_model=Message)
+@router.post("/connection/activity")
 async def data_source_connection_test(
         session: SessionDep,
         current_user: CurrentUser,
-        data_source_in: DataSourceCreate
+        connection: DataSourceConnection
 ) -> Any:
     """
     Create a new data source.
     """
-    activity = await DataSourceCRUD().test_connection(session, data_source_in=data_source_in)
+    activity = await DataSourceCRUD().test_connection(session, connection=connection)
     return activity

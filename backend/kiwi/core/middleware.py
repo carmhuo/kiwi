@@ -2,8 +2,8 @@ import uuid
 import time
 
 from fastapi import Request, Response
-from kiwi.core.logger import Logger
 from kiwi.core.config import logger as app_logger
+from kiwi.core.monitoring import timing_metrics, AGENT_ERRORS, AGENT_SQL_GEN_LATENCY
 
 
 async def log_middleware(request: Request, call_next) -> Response:
@@ -77,3 +77,30 @@ def sanitize_headers(headers: dict) -> dict:
 # await logger.ainfo("Request started", extra={
 #     "headers": sanitize_headers(dict(request.headers))
 # })
+
+
+async def monitor_requests(request: Request, call_next):
+    path = request.url.path
+    method = request.method
+
+    # 跳过指标端点自身监控
+    if path == "/metrics":
+        return await call_next(request)
+
+    # 监控Agent请求
+    if "/agents/" in path:
+        labels = {"path": path, "method": method}
+        async with timing_metrics(AGENT_SQL_GEN_LATENCY, labels):
+            response = await call_next(request)
+
+            # 记录错误
+            if response.status_code >= 400:
+                AGENT_ERRORS.inc({
+                    "path": path,
+                    "method": method,
+                    "status": response.status_code
+                })
+
+            return response
+
+    return await call_next(request)
