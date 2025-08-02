@@ -384,13 +384,24 @@ class MessageCreate(BaseModel):
     conversation_id: Optional[str] = Field(None, description="对话ID，新建对话时为空")
 
 
+class ToolCall(BaseModel):
+    name: str
+    args: Dict[str, Any]
+    id: str
+    type: str = "tool_call"
+
+
 class MessageResponse(BaseModel):
     id: str
     role: str
     content: str
+    name: Optional[str] = None
+    tool_calls: Optional[List[ToolCall]] = None
     sql_query: Optional[str] = None
     report_data: Optional[Dict[str, Any]] = None
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationCreate(BaseModel):
@@ -404,6 +415,8 @@ class ConversationResponse(BaseModel):
     title: str
     created_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationsResponse(BaseModel):
@@ -422,6 +435,18 @@ class FeedbackCreate(BaseModel):
 
 
 # 联邦sql查询
+
+class QueryEngineConfig(BaseModel):
+    max_connections: int = 50  # 根据服务器内存调整(每个连接约10-50MB)
+    min_connections: int = 10
+    timeout: int = 10
+    query_timeout: int = 60
+    enable_httpfs: bool = True
+    arrow_batch_size: int = 65536  # Arrow批次大小
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class QueryFormatType(str, Enum):
     ARROW = "arrow"
     JSON = "json"
@@ -444,11 +469,12 @@ class QueryRequest(BaseModel):
 
 
 class QueryResult(BaseModel):
-    columns: List[str]
-    rows: List[Dict[str, Any]]
+    columns: list[str]
+    rows: list[tuple]
     execution_time: float
     connection_time: float
-    sources_used: List[str]  # 使用的数据源列表
+    sources_used: list[str]  # 使用的数据源列表
+    generated_sql: Optional[str] = None
 
 
 class ArrowResult(BaseModel):

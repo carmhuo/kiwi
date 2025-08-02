@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 from kiwi.core.database import BaseCRUD
 from kiwi.core.monitoring import track_errors, AGENT_ERRORS
 from kiwi.models import Agent, AgentVersion, AgentMetric
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 
@@ -227,8 +227,31 @@ class AgentCRUD(BaseCRUD):
         await db.flush()
         return metric
 
-    async def get_active_agent(self, db, project_id, agent_type):
-        return self.get_by_fields(db, project_id=project_id, agent_type=agent_type, is_active=True)
+    async def get_active_agent(self, db, project_id, agent_type) -> Optional[Agent]:
+        """获取指定项目和类型的活跃Agent及其所有版本
+
+            参数:
+                db: 异步数据库会话
+                project_id: 项目ID
+                agent_type: Agent类型
+
+            返回:
+                Agent对象(包含所有版本) 或 None(如果不存在)
+            """
+        stmt = (
+            select(Agent)
+            .options(
+                selectinload(Agent.versions)
+            )
+            .where(and_(
+                Agent.is_active == True,
+                Agent.project_id == project_id,
+                Agent.type == agent_type
+            ))
+            .order_by(Agent.created_at.desc())
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
 
     async def get_agent_by_name(self, db, name) -> Optional[Agent]:
         result = await db.execute(

@@ -4,12 +4,13 @@ import traceback
 import uuid
 from enum import Enum
 
-import logging
 from typing import Dict, Any
 
 import duckdb
 import pandas as pd
 from sqlalchemy import create_engine
+
+from kiwi.core.config import logger
 
 DUCKDB_EXTENSIONS = ['httpfs', 'sqlite', 'postgres', 'parquet', 'mysql', 'excel']
 
@@ -24,13 +25,23 @@ class DuckDBExtensionsType(str, Enum):
     MYSQL = "mysql"
     EXCEL = "excel"
 
-
+@DeprecationWarning
 class FederatedQueryEngine:
-
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
-
-        self.conn = duckdb.connect(database=':memory:')
+    """
+    联邦查询引擎，资源隔离，一个项目拥有一个引擎实例，根据项目关联的数据源初始化引擎实例
+    1.创建与一个实例，加载扩展项目数据源
+    2. 注册数据源，确保注册到引擎中的有唯一的数据库名称
+    3. 针对数据集中的表，创建全局唯一的表视图名称，如: vw_{db}_{table}
+    """
+    def __init__(
+            self,
+            ext_types: List[str],
+            database: str = ":memory:",
+            read_only=False,
+            config: dict = None
+    ):
+        self.conn = duckdb.connect(database=database, read_only=read_only, config=config)
+        self.ext_types = ext_types
         # 加载默认扩展
         self.load_extensions()
 
@@ -41,15 +52,28 @@ class FederatedQueryEngine:
         self.secrets = {}
         self.load_default_aws_credentials()
 
+    @classmethod
+    def from_datasources(
+            cls,
+            ext_types: List[str],
+            **kwargs: Any,
+    ) -> FederatedQueryEngine:
+        """Construct a federated query engine from heterogeneous data sources"""
+
+        return cls(ext_types, **kwargs)
+
     def load_extensions(self):
         # 加载必要扩展
-        for ext in DUCKDB_EXTENSIONS:
+        for ext in self.ext_types:
             try:
-                self.conn.execute(f"INSTALL {ext};")
-                self.conn.execute(f"LOAD {ext};")
+                ext_type = DuckDBExtensionsType(ext)
+            except  Exception as e:
+                logger.warning(f"不支持的DuckDB扩展类型{ext}: {e}")
+            try:
+                self.conn.execute(f"INSTALL {ext}; LOAD {ext};")
+                logger.info(f"DuckDB扩展已加载:{ext}")
             except duckdb.Error as e:
-                self.logger.warning(f"无法加载扩展 {ext}: {str(e)}")
-        self.logger.info("DuckDB扩展已加载")
+                self.logger.warning(f"无法加载扩展 {ext}: {e}")
 
     def load_default_aws_credentials(self):
         """尝试从环境变量加载默认AWS凭证"""

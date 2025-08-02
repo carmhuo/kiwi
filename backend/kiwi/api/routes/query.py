@@ -1,8 +1,8 @@
 import duckdb
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from kiwi.schemas import QueryRequest
-from kiwi.core.services.federation_query_engine import FederationQueryEngine
+from kiwi.core.engine.federation_query_engine import get_engine
 from kiwi.api.deps import (
     CurrentUser,
     SessionDep,
@@ -19,12 +19,11 @@ async def execute_select(
         current_user: CurrentUser
 ):
     try:
-        result = await FederationQueryEngine.execute_query(
+        result = await get_engine().execute_query(
             db,
             query.project_id,
             query.sql,
-            query.dataset_id,
-            query.format
+            dataset_id = query.dataset_id
         )
         return result
 
@@ -46,12 +45,11 @@ async def execute_query(
         current_user: CurrentUser
 ):
     try:
-        result = await FederationQueryEngine.execute_query(
+        result = await get_engine().execute_query(
             db,
             query.project_id,
             query.sql,
-            query.dataset_id,
-            query.format
+            dataset_id = query.dataset_id
         )
         return result
 

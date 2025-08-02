@@ -1,6 +1,6 @@
 import secrets
 import warnings
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Dict
 
 from pydantic import (
     AnyUrl,
@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         # Use top level .env file (one level above ./backend/)
         env_file="../.env",
+        env_file_encoding="utf-8",
         env_ignore_empty=True,
         extra="ignore",
     )
@@ -179,6 +180,19 @@ class Settings(BaseSettings):
         )
 
         return self
+
+
+    # DuckDB配置
+    DUCKDB_CONNECTION_POOL_SIZE: int = 10
+    DUCKDB_CONNECTION_POOL_TIMEOUT: int = 30
+    DUCKDB_CONFIG: Dict[str, Any] = {
+        "max_connections": 50,  # 根据服务器内存调整(每个连接约10-50MB)
+        "min_connections": 10,
+        "connection_timeout": 10,
+        "query_timeout": 60,
+        "extensions": ['httpfs', 'sqlite', 'postgres', 'parquet', 'mysql', 'excel'],
+        "enable_httpfs": True,
+    }
 
 
 settings = Settings()  # type: ignore

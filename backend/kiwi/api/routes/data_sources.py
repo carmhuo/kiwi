@@ -130,7 +130,11 @@ async def update_data_source(
     """
     Update a data source.
     """
-    pass
+    data_source = await DataSourceCRUD().get_data_source(session, data_source_id)
+    if not data_source:
+        raise HTTPException(status_code=404, detail="DataSource not found")
+    update_dict = data_source_in.model_dump(exclude_unset=True)
+    return await DataSourceCRUD().update(session, data_source, update_dict)
 
 
 @router.delete("/{data_source_id}", response_model=Message)

@@ -6,12 +6,12 @@ from fastapi.routing import APIRoute
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from starlette.middleware.cors import CORSMiddleware
 
+from kiwi.agents import agent_manager
 from kiwi.api.main import api_router
-from kiwi.core.cache import CacheManager
 from kiwi.core.config import settings, logger
-from kiwi.core.middleware import log_middleware, monitor_requests
+from kiwi.core.middleware import log_middleware
 from kiwi.core.database import init_db, close_db
-from kiwi.core.services.federation_query_engine import FederationQueryEngine
+from kiwi.core.engine.federation_query_engine import init_engine, shutdown_engine
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -35,16 +35,20 @@ async def lifespan(app: FastAPI):
         }
     )
     await init_db()
-    # 初始化duckdb实例
-    await FederationQueryEngine.initialize()
+    # 初始化duckdb instance
+    await init_engine(config=settings.DUCKDB_CONFIG)
+    # agent管理实例
+    await agent_manager.start_cleanup_task()
     await logger.ainfo("Kiwi initialize finished")
 
     yield
 
     await logger.ainfo("Application shutting down")
     await close_db()
-    # 关闭duckdb实例
-    await FederationQueryEngine.shutdown()
+    # close duckdb instance
+    await shutdown_engine()
+
+    await agent_manager.stop_cleanup_task()
     # 应用关闭时清理缓存资源
     # await CacheManager.close_cache()
     await logger.ainfo("Application shut down successful")

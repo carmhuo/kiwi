@@ -1,19 +1,16 @@
-import json
-from enum import Enum
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import aliased
-from websockets.headers import parse_connection
 
 from kiwi.core.database import BaseCRUD
-from kiwi.core.services.federation_query_engine import FederationQueryEngine
+from kiwi.core.engine.federation_query_engine import get_engine
 from kiwi.models import DataSource, ProjectDataSource, User
-from kiwi.core.encryption import encrypt_data, decrypt_data
 from kiwi.core.services.datasource_utils import DataSourceType, decrypt_connection_config, encrypt_connection_config
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiwi.schemas import DataSourceCreate, DataSourceUpdate, DataSourceConnection
+from kiwi.schemas import DataSourceCreate, DataSourceConnection
+
 
 class DataSourceCRUD(BaseCRUD):
     def __init__(self):
@@ -101,14 +98,6 @@ class DataSourceCRUD(BaseCRUD):
         db_data_source = await self.create(session, data_source_dict)
         return db_data_source
 
-    async def update_data_source(session: AsyncSession, db_data_source: DataSource,
-                                 data_source_update: DataSourceUpdate) -> DataSource:
-        for key, value in data_source_update.model_dump(exclude_unset=True).items():
-            setattr(db_data_source, key, value)
-        session.commit()
-        session.refresh(db_data_source)
-        return db_data_source
-
     async def delete_data_source(session: AsyncSession, data_source_id: str) -> None:
         pass
 
@@ -142,4 +131,4 @@ class DataSourceCRUD(BaseCRUD):
             raise ValueError("Invalid data source type")
         config = await decrypt_connection_config(source_type, config)
         print(config, source_type.value)
-        return await FederationQueryEngine.connection_activity_test(config, source_type.value)
+        return await get_engine().connection_activity_test(config, source_type.value)
