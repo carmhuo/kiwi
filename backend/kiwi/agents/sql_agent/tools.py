@@ -14,20 +14,15 @@ from typing import Any, Callable, List, Union, Sequence, Dict, Annotated, Option
 
 from duckdb.duckdb import DatabaseError
 from kiwi.agents.sql_agent.prompts import QUERY_DOUBLE_CHECKER
-from langchain.chains.llm import LLMChain
 from langchain_core.prompts import PromptTemplate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import InjectedToolArg
 from langgraph.store.base import BaseStore
-from langchain_core.callbacks import (
-    CallbackManagerForToolRun,
-)
 
 from kiwi.agents.sql_agent.configuration import Configuration
 from kiwi.agents.sql_agent.utils import load_chat_model
-# from kiwi.core.engine.federation_query_engine import FederationQueryEngine
 from kiwi.schemas import QueryResult
 from kiwi.core.config import logger
 
@@ -120,7 +115,7 @@ class ExampleSelector:
             if query in self._cache:
                 return self._cache[query]
 
-            collection = await self.client.get_or_create_collection(name="query_sql")
+            collection = await self.client.get_or_create_collection(name="query_sql_pairs")
             results = await collection.query(query_texts=[query], n_results=n_results)
 
             if not results or "documents" not in results:
@@ -165,7 +160,7 @@ class ToolKits:
         if self._tools is None:
             with self._lock:
                 if self._tools is None:
-                    duckdb_tools = DataBaseTools(self.db, self.project_id, self.query_engine)
+                    duckdb_tools = DatabaseTools(self.db, self.project_id, self.query_engine)
                     self._tools = [
                         duckdb_tools.list_tables,
                         duckdb_tools.get_table_schema,
@@ -175,7 +170,7 @@ class ToolKits:
         return self._tools
 
 
-class DataBaseTools:
+class DatabaseTools:
     """Tools for interacting with federated DuckDB databases"""
 
     MAX_PREVIEW_ROWS = 5
@@ -217,22 +212,7 @@ class DataBaseTools:
             full_table_names=full_table_names
         )
 
-    # async def _get_table_info(self, conn, table_name: str) -> str:
-    #     """Helper to fetch schema and sample for a single table"""
-    #     try:
-    #         # Get schema
-    #         schema = await asyncio.to_thread(conn.execute, f"DESCRIBE {table_name}")
-    #         schema_info = "\n".join(f"{row[0]}: {row[1]}" for row in schema.fetchall())
-    #
-    #         # Get sample data
-    #         sample = await asyncio.to_thread(conn.execute, f"SELECT * FROM {table_name} LIMIT 5")
-    #         sample_info = "\n".join(str(row) for row in sample.fetchall())
-    #
-    #         return f"Table: {table_name}\nSchema:\n{schema_info}\n\nSample data:\n{sample_info}"
-    #     except Exception as e:
-    #         return f"Error getting schema for table {table_name}: {str(e)}"
-
-    async def sql_query_checker(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
+    async def sql_query_checker(self, query: str) -> str:
         """Use the LLM to check the query.
 
         Use this tool to double-check if your query is correct before executing it.
@@ -245,18 +225,24 @@ class DataBaseTools:
         await logger.adebug(f"Validating SQL query: {query[:100]}...")
         try:
             # return db.explain(query)
-            llm_chain = LLMChain(
-                llm=load_chat_model(),  # type: ignore[arg-type]
-                prompt=PromptTemplate(
-                    template=QUERY_DOUBLE_CHECKER, input_variables=["dialect", "query"]
-                ),
+            prompt = PromptTemplate(
+                template=QUERY_DOUBLE_CHECKER,
+                input_variables=["dialect", "query"]
             )
 
-            return self.llm_chain.predict(
-                query=query,
-                dialect=FederationQueryEngine.DIALECT,
-                callbacks=run_manager.get_child() if run_manager else None,
-            )
+            llm = load_chat_model()
+
+            chain = prompt | llm
+
+            response = await chain.ainvoke({
+                "query": query,
+                "dialect": "DuckDB"
+            })
+
+            if hasattr(response, "content"):
+                return str(response.content)
+            else:
+                return str(response)
         except Exception as e:
             await logger.aerror(f"SQL validation failed for query: {query[:100]}... Error: {str(e)}")
             return f"SQL validation failed: {str(e)}"
@@ -321,12 +307,12 @@ class DataBaseTools:
             result = await self._safe_execute(query)
 
             if not result.rows:
-                return "Query executed successfully but returned no results"
+                return ""
 
             return str(result.rows)
 
         except Exception as e:
-            return f"Error executing query: {str(e)}"
+            return f"Error executing query: {e}"
 
     async def _safe_execute(self, query: str, is_explain: bool = False) -> QueryResult:
         """Safe execute helper with timeout"""

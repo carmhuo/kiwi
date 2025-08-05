@@ -227,6 +227,58 @@ flowchart TD
 - 数据分析师： 拥有所在项目即席查询的操作权限，同时拥有创建数据集权限
 - 普通用户： 拥有所在项目的报表查看权限。
 
+### 2.8 检索功能
+设计一个RAG(Retrieval-Augmented Generation)系统，用于增强Kiwi DataAgent的text2sql功能。
+该方案将利用ChromaDB向量库实现向量检索功能，支持元数据检索以提升SQL生成准确性。
+后期支持扩展集成其他向量库。
+
+**核心目标**
+
+- 实现text2sql元数据的向量化存储与检索
+
+- 支持三类关键信息的检索：
+
+  - 查询语句-SQL对（自然语言查询与对应SQL）
+
+  - 表结构schema信息
+
+  - 业务文档与数据字典
+
+检索流程:
+```mermaid
+graph TD
+    A[用户自然语言查询] --> B[RAG检索模块]
+    B --> C[向量数据库 ChromaDB]
+    C --> D[相关元数据]
+    D --> E[LLM生成SQL]
+    E --> F[最终SQL输出]
+    
+    subgraph 数据准备
+        G[历史查询-SQL对] --> H[向量化存储]
+        I[表结构schema] --> H
+        J[业务文档] --> H
+    end
+```
+
+数据更新机制:
+```mermaid
+sequenceDiagram
+    participant User
+    participant System
+    participant ChromaDB
+    
+    User ->> System: 执行新查询
+    System ->> System: 生成SQL并执行
+    User ->> System: 提供反馈
+    System ->> ChromaDB: 存储查询-SQL对(带反馈评分)
+    
+    User ->> System: 更新表结构
+    System ->> ChromaDB: 更新表schema信息
+    
+    User ->> System: 上传业务文档
+    System ->> ChromaDB: 添加或更新业务文档
+```
+
 ## 3. 前端界面规范
 
 ### 3.1 整体布局

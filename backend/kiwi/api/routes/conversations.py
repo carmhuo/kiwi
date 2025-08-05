@@ -1,7 +1,6 @@
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, status
-from fastapi.params import Depends
 from fastapi.responses import StreamingResponse
 
 from kiwi.schemas import (
@@ -45,9 +44,9 @@ async def create_message(
         )
 
 
-@router.post("/event/astream")
+@router.post("/completion/astream")
 async def chat(
-        messages: List[MessageCreate],
+        message: MessageCreate,
         project_id: str,
         db: SessionDep,
         current_user: CurrentUser,
@@ -59,7 +58,10 @@ async def chat(
         """
     try:
         service = ConversationService(db, current_user.id)
-        return StreamingResponse(service.event_stream_generator(messages, project_id), media_type="text/event-stream")
+        return StreamingResponse(
+            service.event_stream_generator(message, project_id),
+            media_type="text/event-stream"
+        )
 
     except HTTPException as http_exc:
         raise http_exc
@@ -190,3 +192,34 @@ async def health_check():
     #         "llm": await check_llm_health()
     #     }
     # }
+
+
+@router.post("/download_csv")
+async def download_csv(user: CurrentUser, id: str):
+    """Download CSV
+    ---
+    parameters:
+      - name: user
+        in: query
+      - name: id
+        in: query|body
+        type: string
+        required: true
+    responses:
+      200:
+        description: download CSV
+    """
+    # df = get_from_cache()
+    # csv = df.to_csv()
+    #
+    # return Response(
+    #     csv,
+    #     mimetype="text/csv",
+    #     headers={"Content-disposition": f"attachment; filename={id}.csv"},
+    # )
+    raise NotImplementedError
+
+
+@router.post("/generate_plotly_figure")
+async def generate_plotly_figure(user: CurrentUser, id: str, df, question, sql):
+    raise NotImplementedError

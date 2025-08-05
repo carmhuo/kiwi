@@ -1,14 +1,27 @@
-from collections.abc import Generator, AsyncGenerator
-
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy import delete
 from sqlalchemy.orm import sessionmaker
+from collections.abc import Generator, AsyncGenerator
 
-from kiwi.core.config import settings
+# 在导入settings前设置环境变量
+os.environ.update({
+    "DATABASE_TYPE": "sqlite",
+    "SQLITE_DB_PATH": ":memory:",
+    "POSTGRES_SERVER": "testserver",
+    "POSTGRES_USER": "testuser",
+    "FIRST_SUPERUSER": "testadmin",
+    "FIRST_SUPERUSER_EMAIL": "admin@test.com",
+    "FIRST_SUPERUSER_PASSWORD": "Pass1234",
+    "ENVIRONMENT": "local",
+    "LOG_TO_FILE": "False"
+})
+
 from kiwi.main import app
 from kiwi.models import User, Base
+from kiwi.core.config import settings
 from kiwi.tests.utils.user import authentication_token_from_email
 from kiwi.tests.utils.utils import get_superuser_token_headers
 from kiwi.initial_data import init_db
@@ -69,7 +82,6 @@ async def db(engine) -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
-
 # @pytest.fixture(scope="session", autouse=True)
 # def db() -> Generator[Session, None, None]:
 #     with Session(engine) as session:
@@ -96,5 +108,5 @@ def superuser_token_headers(client: TestClient) -> dict[str, str]:
 @pytest.fixture(scope="module")
 async def normal_user_token_headers(client: TestClient, db: AsyncSession) -> dict[str, str]:
     return await authentication_token_from_email(
-        client=client, username=settings.TEST_USERNAME ,email=settings.EMAIL_TEST_USER, db=db
+        client=client, username=settings.TEST_USERNAME, email=settings.EMAIL_TEST_USER, db=db
     )
