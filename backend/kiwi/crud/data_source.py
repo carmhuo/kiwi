@@ -5,11 +5,13 @@ from sqlalchemy.orm import aliased
 from kiwi.core.database import BaseCRUD
 from kiwi.core.engine.federation_query_engine import get_engine
 from kiwi.models import DataSource, ProjectDataSource, User
-from kiwi.core.services.datasource_utils import DataSourceType, decrypt_connection_config, encrypt_connection_config
+from kiwi.schemas import DataSourceType
+from kiwi.core.services.datasource_utils import decrypt_connection_config, encrypt_connection_config
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiwi.schemas import DataSourceCreate, DataSourceConnection
+from kiwi.utils import generate_hashed_id
 
 
 class DataSourceCRUD(BaseCRUD):
@@ -132,3 +134,32 @@ class DataSourceCRUD(BaseCRUD):
         config = await decrypt_connection_config(source_type, config)
         print(config, source_type.value)
         return await get_engine().connection_activity_test(config, source_type.value)
+
+    async def upload_file(self, session: AsyncSession, file_path: str, file_type: str):
+        # todo 文件元数据持久到数据库
+        # def inner():
+        #     sheets = []
+        #     engine = get_engine_conn()
+        #     if filename.endswith(".csv"):
+        #         df = pd.read_csv(file_path, engine='c')
+        #         tableName = f"sheet1_{generate_hashed_id}"
+        #         sheets.append({"tableName": tableName, "tableComment": ""})
+        #         insert_pg(df, tableName, engine)
+        #     else:
+        #         sheet_names = pd.ExcelFile(file_path).sheet_names
+        #         for sheet_name in sheet_names:
+        #             tableName = f"{sheet_name}_{generate_hashed_id}"
+        #             sheets.append({"tableName": tableName, "tableComment": ""})
+        #             df_temp = pd.read_excel(file_path, nrows=5)
+        #             non_empty_cols = df_temp.columns[df_temp.notna().any()].tolist()
+        #             df = pd.read_excel(file_path, sheet_name=sheet_name, engine='calamine', usecols=non_empty_cols)
+        #             insert_pg(df, tableName, engine)
+        #
+        #     # os.remove(file_path)
+        #     return {"filename": filename, "sheets": sheets}
+        #
+        # return await asyncio.to_thread(inner)
+
+        # 创建外部表引用
+
+        raise NotImplementedError

@@ -7,7 +7,7 @@ from kiwi.schemas import (
     MessageCreate,
     MessageResponse,
     ConversationResponse,
-    FeedbackCreate, ConversationsResponse, Message, ConversationDetailResponse
+    FeedbackCreate, ConversationsResponse, Message, ConversationDetailResponse, MessageRetry
 )
 from kiwi.api.deps import (
     CurrentUser,
@@ -100,6 +100,18 @@ async def completion(
             detail=f"Internal server error: {str(e)}"
         )
 
+@router.post("/message/retry")
+async def retry_send_message(
+        message_retry: MessageRetry,
+        current_user: CurrentUser,
+        is_member: ProjectMember
+):
+    # 检查message是否存在,若不存在抛出异常
+    if not message_retry.message_id or not message_retry.content:
+        raise HTTPException(status_code=400, detail="message_id or content must be provided.")
+
+    # 检查message的project_id是否与当前用户所属项目一致
+    raise NotImplementedError
 
 @router.post("/completion/human-in-the-loop")
 async def human_in_the_loop(

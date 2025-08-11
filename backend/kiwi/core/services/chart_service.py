@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from kiwi.core.config import logger
 from kiwi.crud.agent import AgentCRUD
+from kiwi.schemas import AgentType
+
 
 class ChartService:
 
@@ -20,7 +22,7 @@ class ChartService:
     ) -> Dict[str, Any]:
         """Generate chart configuration from query results"""
         agent = await self.agent_crud.get_active_agent(
-            self.db, project_id, "CHART_GENERATOR"
+            self.db, project_id, AgentType.CHART_AGENT.value
         )
 
         if not agent:

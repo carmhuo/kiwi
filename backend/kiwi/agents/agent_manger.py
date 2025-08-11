@@ -7,13 +7,8 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from kiwi.schemas import AgentType
 from kiwi.core.config import logger
-
-
-class AgentType(Enum):
-    TEXT_TO_SQL = "text_to_sql"
-    CHART_GENERATOR = "chart_generator"
-    DATABASE_QUERY = "database_query"
 
 
 class AgentInfo:

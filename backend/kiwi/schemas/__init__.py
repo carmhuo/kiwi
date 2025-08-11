@@ -168,9 +168,20 @@ class ProjectDatasourceResponse(BaseModel):
 
 # 数据源模型
 
+class DataSourceType(str, Enum):
+    MYSQL = "mysql"
+    POSTGRES = "postgres"
+    S3 = "s3"
+    SQLITE = "sqlite"
+    LOCAL_FILE = "local_file"
+    DUCK_DB = "duckdb"
+    EXCEL = "excel"
+    CSV = "csv"
+
+
 class DataSourceBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    type: str = Field(..., min_length=1, max_length=20)
+    type: DataSourceType = Field(..., min_length=1, max_length=20)
     description: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -301,14 +312,66 @@ class ProjectDetail(BaseModel):
 
 
 # Agent
+class AgentConfig(BaseModel):
+    model: str = Field(..., description="模型名称", examples=["gpt-4"])
+    base_url: Optional[str] = Field(None, description="Base Url", examples=["https://***/chat/completion/v1"])
+    api_key: Optional[str] = Field(None, description="API Key")
+    stream: Optional[bool] = Field(False, description="是否流式输出回复", examples=[False])
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="采样温度，控制模型生成文本的多样性",
+                                         examples=[0.7])
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0, description=" nucleus sampling，控制模型生成文本的概率范围",
+                                   examples=[0.9])
+    top_k: Optional[int] = Field(None, ge=0, description="top_k sampling，控制模型生成文本的概率范围", examples=[50])
+    response_format: Optional[Dict[str, Any]] = Field(None, description="模型返回的格式", examples=[{"type": "text"}])
+    max_input_tokens: Optional[int] = Field(None, description="模型输入的最大长度", examples=[50000])
+    max_tokens: Optional[int] = Field(None, description="模型输出的最大长度", examples=[50000])
+    tools: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="模型支持的工具列表",
+        examples=[
+            {
+                "type": "tools",
+                "function": {
+                    "name": "get_weather",
+                    "description": "获取天气信息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "city": {
+                                "type": "string",
+                                "description": "城市名称"
+                            }
+                        }
+                    }
+                }
+            }
+        ]
+    )
+    # agent params
+    system_prompt: Optional[str] = Field(None, description="系统提示词",
+                                         examples=["You are an agent designed to interact with a SQL database..."])
+    max_search_results: Optional[int] = Field(None, description="搜索结果数量,用户检索类型数据时使用的搜索结果数量",
+                                              examples=[10])
+    # others
+    options: Optional[Dict[str, Any]] = Field(None, description="其他配置参数", examples=[{"custom_param": "value"}])
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AgentType(str, Enum):
+    TEXT_TO_SQL = "text_to_sql"
+    CHART_AGENT = "chart_generator"
+    RETRIEVAL_AGENT = "retrieval_agent"
+
+
 class AgentBase(BaseModel):
-    name: str = Field(..., max_length=100, example="销售分析Agent")
-    type: str = Field(..., example="TEXT2SQL")
-    config: Dict[str, Any] = Field(..., example={"model": "gpt-4", "temperature": 0.7})
+    name: str = Field(..., max_length=100, examples=["销售分析Agent"])
+    type: AgentType = Field(..., description="Agent类型")
+    config: AgentConfig
 
 
 class AgentCreate(AgentBase):
-    project_id: str = Field(..., example="proj_123")
+    project_id: str = Field(..., examples=["proj_123"])
 
 
 class AgentUpdate(AgentBase):
@@ -380,6 +443,14 @@ class AgentMetricResponse(AgentMetricCreate):
 
 class MessageCreate(BaseModel):
     content: str = Field(..., description="用户消息内容")
+    role: Optional[str] = Field(default="user", description="角色，可选值：user,assistant")
+    conversation_id: Optional[str] = Field(None, description="对话ID，新建对话时为空")
+
+
+class MessageRetry(BaseModel):
+    project_id: str = Field(..., description="项目ID")
+    message_id: Optional[str] = Field(None, description="用户消息ID")
+    content: Optional[str] = Field(None, description="用户消息内容")
     role: Optional[str] = Field(default="user", description="角色，可选值：user,assistant")
     conversation_id: Optional[str] = Field(None, description="对话ID，新建对话时为空")
 
@@ -482,3 +553,39 @@ class ArrowResult(BaseModel):
     batches: list
     num_rows: int
     execution_time: float
+
+
+# vector store
+class VectorStoreType(str, Enum):
+    CHROMADB = "chromadb"
+    FAISS = "faiss"
+    MILVUS = "milvus"
+
+class TrainingItemType(str, Enum):
+    SQL = "sql"
+    DOCUMENTATION = "documentation"
+    DDL = "ddl"
+
+class VectorStoreConfig(BaseModel):
+    embedding_function: str = "default"
+    n_results: int = 10
+    n_results_sql: int = 10
+    n_results_documentation: int = 10
+    n_results_ddl: int = 10
+    collection_name: str = "kiwi_vector"
+    collection_metadata: dict = {}
+    persist_directory: str = "vector_store"
+    persist: bool = False
+    use_faiss: bool = False
+    use_chroma: bool = True
+
+
+class QAData(BaseModel):
+    question: Optional[str] = Field(None, description="问题描述，若为空，则LLM通过sql语句推断生成")
+    sql: str = Field(..., description="sql语句")
+
+
+class TrainingData(BaseModel):
+    qa: Optional[QAData] = Field(None, description="问题描述及sql语句")
+    ddl: Optional[str] = Field(None, description="数据库DDL语句")
+    documentation: Optional[str] = Field(None, description="业务术语、指标定义、数据描述文档")

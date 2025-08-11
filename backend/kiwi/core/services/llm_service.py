@@ -4,7 +4,7 @@ from typing import Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiwi.agents.agent_manger import AgentType
+from kiwi.schemas import AgentType
 from kiwi.core.exceptions import AgentProcessingError
 from kiwi.core.monitoring import track_errors, AGENT_ERRORS, AGENT_SQL_GEN_LATENCY, timing_metrics, \
     DATABASE_QUERY_DURATION

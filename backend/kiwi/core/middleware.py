@@ -1,7 +1,15 @@
+import json
 import uuid
 import time
+from typing import Dict, Any, Callable, Awaitable
 
-from fastapi import Request, Response
+from fastapi import Request
+from fastapi.responses import (
+    JSONResponse,  # 用于构建JSON响应
+    Response,     # 基础响应类
+    StreamingResponse  # 如果需要处理流式响应
+)
+
 from kiwi.core.config import logger as app_logger
 from kiwi.core.monitoring import timing_metrics, AGENT_ERRORS, AGENT_SQL_GEN_LATENCY
 
@@ -104,3 +112,58 @@ async def monitor_requests(request: Request, call_next):
             return response
 
     return await call_next(request)
+
+
+async def response_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """纯函数式响应标准化中间件"""
+
+    # 跳过特定路径
+    skip_paths = {"/openapi.json", "/docs", "/redoc", "/metrics"}
+    if request.url.path in skip_paths:
+        return await call_next(request)
+
+    response = await call_next(request)
+
+    if isinstance(response, StreamingResponse):
+        # 可以选择在这里对流式响应添加额外header等操作
+        response.headers["X-Processed-By"] = "middleware"
+        return response
+
+    # 检查是否需要处理
+    content_type = response.headers.get("content-type", "")
+    if not (response.status_code == 200 and content_type.startswith("application/json")):
+        return response
+
+    try:
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        raw_data = json.loads(body)
+
+        # 已经是标准格式则直接返回
+        if isinstance(raw_data, dict) and all(k in raw_data for k in ("code", "data", "msg")):
+            return JSONResponse(
+                content=raw_data,
+                status_code=response.status_code,
+                headers={k: v for k, v in response.headers.items()
+                         if k.lower() not in ("content-length", "content-type")}
+            )
+
+        # 转换为标准格式
+        return JSONResponse(
+            content={"code": 0, "data": raw_data, "msg": None},
+            status_code=response.status_code,
+            headers={k: v for k, v in response.headers.items()
+                     if k.lower() not in ("content-length", "content-type")}
+        )
+
+    except json.JSONDecodeError:
+        return response
+    except Exception as e:
+        app_logger.error("响应处理错误", extra={
+            "request_id": request.state.request_id,
+            "error": str(e),
+            "path": request.url.path
+        })
+        return JSONResponse(
+            status_code=500,
+            content={"code": 500, "msg": "服务器响应处理错误", "data": None}
+        )

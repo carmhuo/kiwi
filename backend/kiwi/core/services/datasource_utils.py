@@ -2,17 +2,7 @@ from enum import Enum
 from typing import Dict, Any
 
 from kiwi.core.encryption import safe_decrypt, safe_encrypt
-
-
-class DataSourceType(str, Enum):
-    MYSQL = "mysql"
-    POSTGRES = "postgres"
-    S3 = "s3"
-    SQLITE = "sqlite"
-    LOCAL_FILE = "local_file"
-    DUCK_DB = "duckdb"
-    OTHERS = "others"
-
+from kiwi.schemas import DataSourceType
 
 REQUIRED_FIELD_MAP = {
     DataSourceType.MYSQL: 'password',

@@ -187,3 +187,7 @@ def deterministic_uuid(content: str | bytes) -> str:
     content_uuid = str(uuid.uuid5(namespace, hash_hex))
 
     return content_uuid
+
+
+def generate_hashed_id() -> str:
+    return hashlib.sha256(uuid.uuid4().bytes).hexdigest()[:10]

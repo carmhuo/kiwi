@@ -218,7 +218,7 @@ class MessageManager:
             agent_type: str
     ) -> Optional[str]:
         """Get active agent version ID (internal helper)"""
-        agent = await AgentCRUD().get_active_agent(
+        agent = await AgentCRUD().get_active_agent_with_history_versions(
             self.db, project_id, agent_type
         )
         if agent and agent.versions:

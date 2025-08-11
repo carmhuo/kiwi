@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from typing import Optional, Sequence
+from typing import Optional, List
 
 from kiwi.core.database import BaseCRUD
 from kiwi.core.monitoring import track_errors, AGENT_ERRORS
@@ -158,7 +158,8 @@ class AgentCRUD(BaseCRUD):
         await db.flush()
         return await self.get_agent(db, agent_id)
 
-    async def get_next_version(self, db: AsyncSession, agent_id: str) -> Optional[str]:
+    @staticmethod
+    async def get_next_version(db: AsyncSession, agent_id: str) -> Optional[str]:
         result = await db.execute(
             select(func.max(AgentVersion.version))
             .where(AgentVersion.agent_id == agent_id)
@@ -177,8 +178,9 @@ class AgentCRUD(BaseCRUD):
         new_version = f"v{major}.{minor}.{int(patch) + 1}"
         return new_version
 
+    @staticmethod
     async def record_metric(
-            self, db: AsyncSession, version_id: str, metric_data: dict
+            db: AsyncSession, version_id: str, metric_data: dict
     ) -> AgentMetric:
         db_metric = AgentMetric(
             version_id=version_id,
@@ -228,16 +230,38 @@ class AgentCRUD(BaseCRUD):
         return metric
 
     async def get_active_agent(self, db, project_id, agent_type) -> Optional[Agent]:
+        """获取指定项目和类型的活跃Agent
+
+        Args:
+            db: 异步数据库会话
+            project_id: 项目ID
+            agent_type: Agent类型
+
+        Returns:
+            Agent对象 或 None(如果不存在)
+        """
+        stmt = (
+            select(Agent)
+            .where(and_(
+                Agent.is_active == True,
+                Agent.project_id == project_id,
+                Agent.type == agent_type
+            ))
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    async def get_active_agent_with_history_versions(self, db, project_id, agent_type) -> Optional[Agent]:
         """获取指定项目和类型的活跃Agent及其所有版本
 
-            参数:
-                db: 异步数据库会话
-                project_id: 项目ID
-                agent_type: Agent类型
+        Args:
+            db: 异步数据库会话
+            project_id: 项目ID
+            agent_type: Agent类型
 
-            返回:
-                Agent对象(包含所有版本) 或 None(如果不存在)
-            """
+        Returns:
+            Agent对象(包含所有版本) 或 None(如果不存在)
+        """
         stmt = (
             select(Agent)
             .options(
@@ -254,16 +278,35 @@ class AgentCRUD(BaseCRUD):
         return result.scalars().first()
 
     async def get_agent_by_name(self, db, name) -> Optional[Agent]:
+        """通过名称获取Agent信息"""
         result = await db.execute(
             select(Agent)
             .where(Agent.name == name)
         )
         return result.scalars().first()
 
-    async def list_agents(self, db, project_id, skip, limit):
+    async def list_agents(self, db, project_id, skip, limit) -> List[Agent]:
+        """获取指定项目的所有代理
+        Args:
+            db: 数据库连接对象，用于执行SQL查询
+            project_id: 项目ID，用于筛选特定项目的代理
+            skip: 跳过指定数量的代理
+            limit: 返回指定数量的代理
+        Returns:
+            指定项目的代理列表
+        """
         return await self.get_multi(db, skip, limit, project_id=project_id)
 
-    async def list_agent_versions(self, db, agent_id, skip, limit):
+    async def list_agent_versions(self, db, agent_id, skip, limit) -> List[AgentVersion]:
+        """获取指定Agent的所有版本
+        Args:
+            db: 数据库连接对象，用于执行SQL查询
+            agent_id: 代理ID，用于筛选特定代理的版本
+            skip: 跳过指定数量的版本
+            limit: 返回指定数量的版本
+        Returns:
+            指定Agent的版本列表
+        """
         result = await db.execute(
             select(AgentVersion)
             .where(AgentVersion.agent_id == agent_id)
@@ -274,6 +317,13 @@ class AgentCRUD(BaseCRUD):
         return result.scalars().all()
 
     async def count_agent_versions(self, db, agent_id):
+        """统计指定代理的所有版本数量
+        Args:
+            db: 数据库连接对象，用于执行SQL查询
+            agent_id: 代理ID，用于筛选特定代理的版本
+        Returns:
+            指定代理的版本数量，如果查询结果为空则返回0
+        """
         stmt = (select(func.count()).select_from(AgentVersion)
                 .where(AgentVersion.agent_id == agent_id))  # type: ignore
         result = await db.execute(stmt)
