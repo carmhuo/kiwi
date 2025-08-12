@@ -1,10 +1,17 @@
+from contextlib import asynccontextmanager
+
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from starlette.middleware.cors import CORSMiddleware
 
+from kiwi.agents import agent_manager
 from kiwi.api.main import api_router
-from kiwi.core.config import settings
+from kiwi.core.config import settings, logger
+from kiwi.core.middleware import log_middleware
+from kiwi.core.database import init_db, close_db
+from kiwi.core.engine.federation_query_engine import init_engine, shutdown_engine
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -14,20 +21,67 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
     sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    await logger.ainfo(
+        "Application starting",
+        extra={
+            "app_name": settings.PROJECT_NAME,
+            "environment": settings.ENVIRONMENT,
+            "version": settings.VERSION,
+            "log_level": settings.LOG_LEVEL
+        }
+    )
+    await init_db()
+    # 初始化duckdb instance
+    await init_engine(config=settings.DUCKDB_CONFIG)
+    # agent管理实例
+    await agent_manager.start_cleanup_task()
+    await logger.ainfo("Kiwi initialize finished")
+
+    yield
+
+    await logger.ainfo("Application shutting down")
+    await close_db()
+    # close duckdb instance
+    await shutdown_engine()
+
+    await agent_manager.stop_cleanup_task()
+    # 应用关闭时清理缓存资源
+    # await CacheManager.close_cache()
+    await logger.ainfo("Application shut down successful")
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     generate_unique_id_function=custom_generate_unique_id,
+    lifespan=lifespan,
 )
 
 # Set all CORS enabled origins
 if settings.all_cors_origins:
     app.add_middleware(
-        CORSMiddleware,
+        CORSMiddleware,  # type: ignore
         allow_origins=settings.all_cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+# 添加请求监控中间件
+app.middleware("http")(log_middleware)
+# app.middleware("http")(monitor_requests)
+
+# 添加路由
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# 初始化OpenTelemetry
+FastAPIInstrumentor.instrument_app(app)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)

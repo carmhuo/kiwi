@@ -357,21 +357,99 @@ def check_query_permission(user, dataset_id, sql):
 
 支持的数据源类型：
 
-- 关系数据库
-    - SQLite
-    - MySQL
-    - PostgreSQL
-- 数据仓库
-    - Impala
-    - Hive
-- OLAP引擎
-    - DuckDB
-    - StarRocks
-- 文件服务
-    - S3
-    - SFTP
+#### 关系数据库
+
+- SQLite
+
+```json
+
+```
+
+- MYSQL:
+
+```json
+  {
+  "host": "db.example.com",
+  "port": 3306,
+  "database": "sales",
+  "username": "admin",
+  "password": "******"
+}
+
+```
+
+- PostgreSQL:
+
+```json
+  {
+  "host": "db.example.com",
+  "port": 5432,
+  "database": "sales",
+  "username": "admin",
+  "password": "******"
+}
+```
+
+#### 数据仓库
+
+- Impala
+- Hive
+
+#### OLAP引擎
+
+- DuckDB
+- StarRocks
+
+#### 文件服务
+
+- S3
+
+```json
+  {
+  "endpoint": "https://s3.amazonaws.com",
+  "region": "us-west-2",
+  "bucket": "my-bucket",
+  "access_key": "AKIA1234567890",
+  "secret_key": "********"
+}
+```
+
+- SFTP
 
 ### 数据集管理
+
+#### 数据集创建
+
+1. 输入：数据集名称、项目 ID、数据源别名、表映射、字段筛选、表关系。
+2. 处理：
+    - 验证数据源是否存在。
+    - 验证数据源别名是否唯一。
+    - 将数据集配置保存为 JSON 格式。
+3. 输出：创建数据集并关联数据源。
+
+#### 数据集查询
+
+1. 输入：数据集 ID。
+2. 处理：
+    - 查询数据集配置。
+    - 解密数据源连接信息。
+3. 输出：返回数据集详情，包括数据源、表映射、表关系等信息。
+
+#### 数据集更新
+
+1. 输入：数据集 ID、更新字段。
+2. 处理：
+    - 更新数据集配置。
+    - 如果涉及数据源别名更新，确保别名唯一。
+3. 输出：返回更新后的数据集。
+
+#### 数据集删除
+
+1. 输入：数据集 ID。
+2. 处理：
+    - 删除数据集。
+    - 删除数据集与数据源的关联。
+3. 输出：确认数据集删除成功。
 
 ### Agent管理
 
@@ -581,6 +659,42 @@ graph TB
 
 ### 对话管理
 
+架构：
+
+```mermaid
+graph TD
+    A[用户提问] --> B[前端]
+    B --> C[API网关]
+    C --> D[对话路由]
+    D --> E{缓存检查}
+    E -->|存在| F[返回缓存结果]
+    E -->|不存在| G[TEXT2SQL Agent]
+    G --> H[SQL安全校验]
+    H --> I[SQL执行引擎]
+    I --> J{执行成功}
+    J -->|是| K[结果处理]
+    J -->|否| L[错误处理]
+    K --> M[图表生成Agent]
+    M --> N[结果格式化]
+    N --> O[保存对话]
+    O --> P[返回结果]
+    L --> Q[重试/降级]
+    Q -->|成功| K
+    Q -->|失败| R[返回错误]
+
+    subgraph 监控
+        S[SQL生成延迟] --> G
+        T[查询执行时间] --> I
+        U[结果准确率] --> P
+    end
+
+    subgraph 安全
+        V[权限校验] --> D
+        W[数据脱敏] --> K
+        X[SQL注入防护] --> H
+    end
+```
+
 * 创建会话 → 发送消息 → 获取Agent响应 → 提交反馈
 * 消息包含生成的SQL、查询结果和可视化配置
 
@@ -599,6 +713,7 @@ graph TD
 ```
 
 时序图：
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -608,14 +723,12 @@ sequenceDiagram
     participant DuckDB
     participant CircuitBreaker as 熔断器
     participant RetryManager as 重试管理器
-    
     User ->> Frontend: 输入自然语言查询
     Frontend ->> Backend: POST /conversations/{id}/messages
-    
     Backend ->> RetryManager: 请求SQL生成（重试策略）
     RetryManager ->> Agent: 调用TEXT2SQL Agent
     Agent -->> RetryManager: 生成结果
-    
+
     alt 生成成功
         RetryManager -->> Backend: SQL语句
     else 生成失败
@@ -628,10 +741,10 @@ sequenceDiagram
             Frontend -->> User: 显示"智能解析失败，请重新表述"
         end
     end
-    
+
     Backend ->> CircuitBreaker: 请求执行SQL
     CircuitBreaker ->> DuckDB: 执行SQL查询
-    
+
     alt 执行成功
         DuckDB -->> CircuitBreaker: 查询结果
         CircuitBreaker -->> Backend: 结果数据
@@ -653,17 +766,172 @@ sequenceDiagram
             Frontend -->> User: 显示"系统繁忙，请稍后再试"
         end
     end
-    
+
     User ->> Frontend: 提交反馈（可选）
 ```
 
 ### 数据查询优化
 
-使用DuckDB内存引擎加速查询
+#### 原则：
 
-SQL执行前进行安全校验（防止DROP等危险操作）
+1. 使用DuckDB内存引擎加速查询
 
-查询结果缓存机制
+2. SQL执行前进行安全校验（防止DROP等危险操作）
+
+3. 查询结果缓存机制
+
+#### 方案设计
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant Queue as asyncio.Queue
+    participant DuckDB
+    participant ExternalDB
+    
+    Client->>API: POST /query (SQL)
+    API->>Queue: 获取连接请求
+    Queue-->>API: 分配连接
+    API->>DuckDB: ATTACH 数据源
+    loop 每个数据源
+        DuckDB->>ExternalDB: 建立连接
+        ExternalDB-->>DuckDB: 确认
+    end
+    API->>DuckDB: CREATE VIEW (可选)
+    API->>DuckDB: 执行SQL
+    DuckDB->>ExternalDB: 联邦查询
+    loop 查询处理
+        ExternalDB-->>DuckDB: 返回数据
+    end
+    DuckDB-->>API: 查询结果
+    API->>Queue: 归还连接
+    API-->>Client: 返回结果
+```
+
+部署架构：
+```mermaid
+graph LR
+    A[客户端] --> B[负载均衡器]
+    B --> C[FastAPI实例1]
+    B --> D[FastAPI实例2]
+    B --> E[FastAPI实例3]
+    
+    subgraph DuckDB集群
+        C --> F[DuckDB连接池]
+        D --> G[DuckDB连接池]
+        E --> H[DuckDB连接池]
+    end
+    
+    subgraph 数据源集群
+        F --> I[PostgreSQL]
+        F --> J[MySQL]
+        G --> K[S3]
+        H --> L[SQLite]
+    end
+    
+    subgraph 元数据存储
+        C --> M[PostgreSQL元数据库]
+        D --> M
+        E --> M
+    end
+```
+
+设计思路
+
+- 动态数据源管理：在查询时动态附加项目关联的数据源
+
+- 视图映射：使用数据集配置创建虚拟视图，统一表名
+
+- 异步执行：使用FastAPI异步特性处理并发请求
+
+- 安全隔离：每个查询使用独立DuckDB实例，避免状态污染
+
+- 连接池管理：优化数据库连接性能
+
+其它方案：
+
+1. 当用户开始一个对话（或查询）时，我们根据项目ID获取该项目关联的所有数据源（包括别名和连接配置）。
+2. 根据数据源类型，生成ATTACH语句（或加载扩展）来连接外部数据源。
+3. 然后，根据数据集配置（如果有的话）创建视图，将数据源的表（可能只选取部分字段）映射为视图，视图名为数据集配置中的目标名称（target_name）。如果没有数据集配置，则直接使用附加的别名和表名。
+4. 执行用户查询（由Agent生成的SQL）时，SQL中使用的表名是这些视图名（即目标名称）。
+5. 查询结束后，我们可以选择保留这个DuckDB连接（用于同一个对话的后续查询）或者关闭（我们这里为每个查询创建一个新的DuckDB连接，因为DuckDB是轻量级的，且避免状态维护的复杂性）。
+   注意：由于数据源连接可能很多，且每次查询都要重新附加，这可能会影响性能。因此，我们可以考虑缓存DuckDB的连接（按项目缓存，每个项目一个DuckDB连接，并在其中附加好数据源）。但是，这样需要管理连接池，并且注意连接超时和更新问题（如果数据源配置变了，缓存需要更新）。另一种做法是每次查询都重新建立，但这样效率低。
+   折中方案：在项目数据源配置发生变化时，清除缓存。我们为每个项目维护一个DuckDB连接（内存数据库），并在应用启动时创建一个连接池（实际上，我们可以为每个项目创建一个DuckDB内存数据库的连接，然后在该连接上附加数据源，并保持这个连接长期存在）。这样，同一个项目的多次查询可以复用这个连接。
+
+使用一个全局的缓存（字典）来存储每个项目的DuckDB连接（每个项目一个连接）。
+
+- 当第一次需要某个项目的查询时，初始化DuckDB连接，并附加该项目的数据源，然后创建必要的视图（根据数据集配置）。
+- 后续查询都使用这个连接。
+- 当数据源配置发生变化时，我们重置该项目的连接（下次查询重新初始化）。
+  但是，数据集配置也可能变化，所以数据集配置变化时也要重置。
+
+#### 具体实现：
+
+步骤1：创建DuckDB连接管理器（单例）
+步骤2：在需要执行联邦查询时，获取该项目的DuckDB连接（如果不存在则初始化）
+步骤3：初始化包括：
+a. 创建DuckDB内存连接
+b. 根据数据源类型加载扩展（如mysql, postgres, httpfs等）
+c. 附加所有数据源（使用project_data_source中的别名和连接配置）
+d. 根据数据集配置创建视图（如果数据集存在，则遍历数据集中的表映射，为每个表映射创建视图，视图名为target_name，视图的查询语句为：从附加的数据源中选择指定的列）
+步骤4：使用该连接执行查询
+步骤5：在数据源配置或数据集配置更新时，清除该项目的连接缓存（下次重新初始化）
+
+
+### RAG方案
+设计一个RAG(Retrieval-Augmented Generation)方案，用于增强Kiwi DataAgent的text2sql功能。该方案将利用ChromaDB实现向量检索功能，支持元数据检索以提升SQL生成准确性。
+
+#### 核心目标
+- 实现text2sql元数据的向量化存储与检索
+
+- 支持三类关键信息的检索：
+
+  - 查询语句-SQL对（自然语言查询与对应SQL）
+
+  - 表结构schema信息
+
+  - 业务文档与数据字典
+
+#### 技术架构
+```mermaid
+graph TD
+    A[用户自然语言查询] --> B[RAG检索模块]
+    B --> C[向量数据库 ChromaDB]
+    C --> D[相关元数据]
+    D --> E[LLM生成SQL]
+    E --> F[最终SQL输出]
+
+    subgraph 数据准备
+        G[历史查询-SQL对] --> H[向量化存储]
+        I[表结构schema] --> H
+        J[业务文档] --> H
+    end
+```
+
+#### 详细设计
+数据模型设计
+
+向量集合(Collection)设计PseudoCode.
+```python
+class VectorCollection:
+    def __init__(self):
+        self.collections = {
+            "query_sql_pairs": {
+                "description": "存储自然语言查询与对应SQL的映射",
+                "metadata": ["project_id", "data_source", "tables_used", "creator", "feedback_score"]
+            },
+            "table_schemas": {
+                "description": "存储表结构信息",
+                "metadata": ["project_id", "data_source", "table_name", "last_updated"]
+            },
+            "business_docs": {
+                "description": "存储业务文档与数据字典",
+                "metadata": ["project_id", "doc_type", "related_tables", "version"]
+            }
+        }
+```
+
 
 ## 4.接口设计(OpenAPI 3.0规范)
 

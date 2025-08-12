@@ -1,84 +1,134 @@
-from kiwi_backend.database import BaseCRUD
-from kiwi_backend.models import DataSource
-from kiwi_backend.utils.encryption import encrypt_data, decrypt_data
-from sqlalchemy import select
+from typing import List, Optional, Dict, Any
+
+from sqlalchemy.orm import aliased
+
+from kiwi.core.database import BaseCRUD
+from kiwi.core.engine.federation_query_engine import get_engine
+from kiwi.models import DataSource, ProjectDataSource, User
+from kiwi.core.services.datasource_utils import DataSourceType, decrypt_connection_config, encrypt_connection_config
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from kiwi.schemas import DataSourceCreate, DataSourceConnection
 
 
 class DataSourceCRUD(BaseCRUD):
     def __init__(self):
         super().__init__(DataSource)
 
-    async def create_encrypted(
-            self,
-            db: AsyncSession,
-            data_source_data: dict
-    ):
-        """创建加密的数据源配置"""
-        # 加密敏感字段
-        encrypted_config = encrypt_data(data_source_data["connection_config"])
-        data_source_data["connection_config"] = encrypted_config
-        return await self.create(db, data_source_data)
+    async def list_data_sources_by_user(self, session: AsyncSession, user_id: str, skip: int, limit: int):
+        """
+        Asynchronously retrieves a list of data sources for a specified user.
 
-    async def update_encrypted(
-            self,
-            db: AsyncSession,
-            db_obj,
-            update_data: dict
-    ):
-        """更新加密的数据源配置"""
-        if "connection_config" in update_data:
-            update_data["connection_config"] = encrypt_data(
-                update_data["connection_config"]
-            )
-        return await self.update(db, db_obj, update_data)
+        This function is designed to fetch a portion of the data sources belonging to a specific user,
+        as defined by the skip and limit parameters, using an asynchronous mechanism to improve performance.
 
-    async def get_decrypted(
-            self,
-            db: AsyncSession,
-            id: int
-    ):
-        """获取解密后的数据源配置"""
-        data_source = await self.get(db, id)
-        if not data_source:
-            return None
+        Parameters:
+        - session: Represents the current database session, essential for interacting with the database.
+        - user_id: The unique identifier of the user, used to locate the user's data sources.
+        - skip: The number of records to skip, used for pagination to avoid retrieving too much data at once.
+        - limit: The maximum number of records to retrieve, used in conjunction with skip for pagination.
 
-        # 解密连接配置
-        decrypted_config = decrypt_data(data_source.connection_config)
-        data_source.connection_config = decrypted_config
-        return data_source
+        Returns:
+        A list of data sources belonging to the specified user, according to the skip and limit parameters.
+        """
+        return await self.get_multi(session, skip, limit, owner_id=user_id)
+
+    async def list_data_sources_by_project(self, session: AsyncSession, project_id: str, skip: int, limit: int) -> List[
+        DataSource]:
+        """
+        Asynchronously retrieves a list of data sources for a specified project.
+
+        Parameters:
+        - session: The current database session.
+        - project_id: The unique identifier of the project.
+        - skip: Number of records to skip for pagination.
+        - limit: Maximum number of records to retrieve.
+
+        Returns:
+        A list of data sources associated with the specified project, including owner and creator names.
+        """
+        user_creator = aliased(User)
+
+        stmt = (
+            select(DataSource, User.username.label("owner_name"), user_creator.username.label("creator_name"))
+            .join(ProjectDataSource, DataSource.id == ProjectDataSource.data_source_id)
+            .join(User, DataSource.owner_id == User.id)
+            .join(user_creator, DataSource.created_by == user_creator.id)
+            .where(ProjectDataSource.project_id == project_id)
+            .order_by(desc(DataSource.created_at))
+            .offset(skip)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+
+        # 组合结果，将 owner_name 和 creator_name 添加到 DataSource 对象中
+        data_sources = []
+        for row in result:
+            data_source = row.DataSource
+            if data_source is None:
+                continue
+            data_source.owner_name = row.owner_name
+            data_source.creator_name = row.creator_name
+            data_sources.append(data_source)
+
+        return data_sources
+
+    async def get_data_source(self, session: AsyncSession, data_source_id: str) -> Optional[DataSource]:
+
+        return await self.get(session, data_source_id)
+
+    async def get_data_source_by_name(self, db: AsyncSession, source_name: str) -> User:
+        """根据用户名获取用户"""
+        return await self.get_by_field(db, "name", source_name)
+
+    async def create_data_source(self, session: AsyncSession, data_source_create: DataSourceCreate,
+                                 user_id: str, type: DataSourceType) -> DataSource:
+
+        connect_config = data_source_create.connection_config
+
+        config = encrypt_connection_config(type, connect_config)
+
+        data_source_dict = data_source_create.model_dump()
+        data_source_dict.update({
+            "connection_config": config,
+            "owner_id": user_id,
+            "created_by": user_id
+        })
+        db_data_source = await self.create(session, data_source_dict)
+        return db_data_source
+
+    async def delete_data_source(session: AsyncSession, data_source_id: str) -> None:
+        pass
 
     async def test_connection(
             self,
             db: AsyncSession,
-            data_source_id: int
-    ):
+            data_source_id: Optional[str] = None,
+            connection: Optional[DataSourceConnection] = None
+    ) -> Dict[str, Any]:
         """测试数据源连接"""
-        data_source = await self.get_decrypted(db, data_source_id)
-        if not data_source:
-            return False
-
-        # 根据类型创建连接
-        db_type = data_source.type.lower()
+        if data_source_id:
+            data_source = await self.get_data_source(db, data_source_id)
+            if not data_source:
+                return {
+                    'status': False,
+                    'message': f"数据源不存在：{data_source_id}"
+                }
+            config = data_source.connection_config
+            source_type = data_source.type
+        elif connection:
+            config = connection.connection_config
+            source_type = connection.type
+        else:
+            return {
+                'status': False,
+                'message': "配置参数异常"
+            }
         try:
-            if db_type == "mysql":
-                import mysql.connector
-                conn = mysql.connector.connect(
-                    **data_source.connection_config
-                )
-                conn.close()
-                return True
-
-            elif db_type == "postgresql":
-                import psycopg2
-                conn = psycopg2.connect(
-                    **data_source.connection_config
-                )
-                conn.close()
-                return True
-
-            # 其他数据库类型...
-
-        except Exception as e:
-            print(f"连接测试失败: {str(e)}")
-            return False
+            source_type = DataSourceType(source_type.strip().lower())
+        except ValueError:
+            raise ValueError("Invalid data source type")
+        config = await decrypt_connection_config(source_type, config)
+        print(config, source_type.value)
+        return await get_engine().connection_activity_test(config, source_type.value)

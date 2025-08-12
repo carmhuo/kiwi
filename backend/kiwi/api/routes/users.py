@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from kiwi.api.schemas import (
+from kiwi.schemas import (
     UserCreate,
     UserResponse,
     Message,
@@ -13,7 +13,7 @@ from kiwi.api.schemas import (
     UserUpdateMe,
     UpdatePassword,
     UserRegister)
-from kiwi.core.security import verify_password, get_password_hash
+from kiwi.core.security.auth_utils import verify_password, get_password_hash
 from kiwi.crud.user import UserCRUD
 from kiwi.api.deps import (
     CurrentUser,
