@@ -1,0 +1,52 @@
+{
+  "title": "Kiwi Agent 监控仪表板",
+  "panels": [
+    {
+      "title": "SQL生成延迟",
+      "type": "graph",
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum(rate(agent_sql_gen_latency_seconds_bucket[5m])) by (le, agent_type))",
+        "legendFormat": "{{agent_type}} P95"
+      }],
+      "yAxis": {"format": "s"}
+    },
+    {
+      "title": "查询成功率",
+      "type": "gauge",
+      "targets": [{
+        "expr": "avg(agent_query_success_rate) by (version_id)",
+        "legendFormat": "版本 {{version_id}}"
+      }],
+      "thresholds": {
+        "steps": [
+          {"value": 0.8, "color": "red"},
+          {"value": 0.95, "color": "green"}
+        ]
+      }
+    },
+    {
+      "title": "错误率",
+      "type": "graph",
+      "targets": [{
+        "expr": "sum(rate(agent_errors_total[5m])) by (error_type)",
+        "legendFormat": "{{error_type}}"
+      }]
+    },
+    {
+      "title": "数据库查询性能",
+      "type": "graph",
+      "targets": [{
+        "expr": "histogram_quantile(0.9, rate(database_query_duration_seconds_bucket[5m]))",
+        "legendFormat": "P90"
+      }]
+    },
+    {
+      "title": "活跃请求",
+      "type": "graph",
+      "targets": [{
+        "expr": "sum(agent_active_requests) by (path)",
+        "legendFormat": "{{path}}"
+      }]
+    }
+  ]
+}

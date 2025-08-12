@@ -1,0 +1,29 @@
+groups:
+- name: agent-performance
+  rules:
+  - alert: HighSQLLatency
+    expr: histogram_quantile(0.95, rate(agent_sql_gen_latency_seconds_bucket[5m])) > 3
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "SQL生成延迟超过阈值"
+      description: "Agent {{ $labels.agent_id }} 的SQL生成P95延迟为 {{ $value }}秒，超过3秒阈值"
+
+  - alert: LowSuccessRate
+    expr: avg(agent_query_success_rate) < 0.85
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "查询成功率过低"
+      description: "Agent版本 {{ $labels.version_id }} 的查询成功率为 {{ $value }}%，低于85%阈值"
+
+  - alert: HighErrorRate
+    expr: rate(agent_errors_total[5m]) > 5
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "高错误率"
+      description: "检测到高错误率: {{ $value }} 错误/分钟"
