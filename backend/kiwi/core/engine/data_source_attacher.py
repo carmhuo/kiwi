@@ -1,4 +1,5 @@
 import asyncio
+import os
 from enum import Enum
 from typing import Dict, Set, Optional, Any, Tuple, List
 import duckdb
@@ -7,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from kiwi.models import ProjectDataSource, Dataset, DatasetProjectSource, DataSource
-from kiwi.core.services.datasource_utils import decrypt_connection_config, DataSourceType
+from kiwi.schemas import DataSourceType
+from kiwi.core.services.datasource_utils import decrypt_connection_config
 from kiwi.core.config import logger
 
 
@@ -295,3 +297,81 @@ class DataSourceAttacher:
             f"CREATE OR REPLACE VIEW {target_name} AS "
             f"SELECT {columns_str} FROM {source_alias}.{source_table}"
         )
+
+    @staticmethod
+    async def _attach_excel(
+            conn: duckdb.DuckDBPyConnection,
+            config: Dict[str, Any],
+            database_alias: str
+    ):
+        """
+        附加Excel文件作为数据源
+        """
+        file_path = config["file_path"]
+
+        # 加载Excel扩展
+        conn.execute("INSTALL 'excel';")
+        conn.execute("LOAD 'excel';")
+
+        # 创建模式并附加Excel文件
+        conn.execute(f"CREATE SCHEMA IF NOT EXISTS {database_alias};")
+
+        # 读取Excel文件中的所有工作表
+        tables = conn.execute(f"SELECT * FROM excel_scan('{file_path}')").fetchall()
+
+        # 为每个工作表创建视图
+        for table in tables:
+            sheet_name = table[0]
+            # 替换特殊字符为下划线
+            safe_sheet_name = sheet_name.replace(" ", "_").replace("-", "_")
+            conn.execute(
+                f"CREATE VIEW {database_alias}.{safe_sheet_name} AS "
+                f"SELECT * FROM excel_scan('{file_path}', '{sheet_name}')"
+            )
+
+    @staticmethod
+    async def _attach_parquet(
+            conn: duckdb.DuckDBPyConnection,
+            config: Dict[str, Any],
+            database_alias: str
+    ):
+        """
+        附加CSV/Parquet文件作为数据源
+        """
+        file_path = config["file_path"]
+        file_type = config.get("file_type", "csv")
+        has_header = config.get("has_header", True)
+        delimiter = config.get("delimiter", ",")
+
+        if file_type == "csv":
+            # 加载CSV扩展
+            conn.execute("INSTALL 'parquet';")
+            conn.execute("LOAD 'parquet';")
+
+            # 创建模式并附加CSV文件
+            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {database_alias};")
+
+            # 从文件名获取表名
+            table_name = os.path.splitext(os.path.basename(file_path))[0]
+            table_name = table_name.replace("-", "_").replace(" ", "_")
+
+            # 创建视图
+            conn.execute(
+                f"CREATE VIEW {database_alias}.{table_name} AS "
+                f"SELECT * FROM read_csv('{file_path}', "
+                f"header={str(has_header).lower()}, "
+                f"delim='{delimiter}')"
+            )
+        else:
+            # 处理Parquet文件
+            conn.execute("INSTALL 'parquet';")
+            conn.execute("LOAD 'parquet';")
+
+            conn.execute(f"CREATE SCHEMA IF NOT EXISTS {database_alias};")
+            table_name = os.path.splitext(os.path.basename(file_path))[0]
+            table_name = table_name.replace("-", "_").replace(" ", "_")
+
+            conn.execute(
+                f"CREATE VIEW {database_alias}.{table_name} AS "
+                f"SELECT * FROM read_parquet('{file_path}')"
+            )

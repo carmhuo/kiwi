@@ -56,6 +56,18 @@ async def create_agent(
         current_user: CurrentUser,
         _: bool = Depends(verify_agent_permission)
 ):
+    """
+    创建新的Agent
+
+    Args:
+        agent (AgentCreate): 包含Agent创建信息的数据模型
+        db (SessionDep): 数据库会话依赖
+        current_user (CurrentUser): 当前认证用户信息
+        _ (bool): 通过Depends注入的权限验证依赖，无实际使用价值
+
+    Returns:
+        AgentResponse: 创建成功的Agent响应模型
+    """
     project_id = agent.project_id
     # 检查项目是否存在
     if not project_id and not await ProjectCRUD().get_project_by_id(db, project_id):

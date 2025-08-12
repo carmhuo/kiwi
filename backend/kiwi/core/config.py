@@ -181,7 +181,6 @@ class Settings(BaseSettings):
 
         return self
 
-
     # DuckDB配置
     DUCKDB_CONNECTION_POOL_SIZE: int = 10
     DUCKDB_CONNECTION_POOL_TIMEOUT: int = 30
@@ -193,6 +192,15 @@ class Settings(BaseSettings):
         "extensions": ['httpfs', 'sqlite', 'postgres', 'parquet', 'mysql', 'excel'],
         "enable_httpfs": True,
     }
+
+    VECTOR_STORE_TYPE: str = "chromadb"
+    VECTOR_STORE_CONFIG: Dict[str, Any] = {
+        "n_results": 10,
+    }
+
+    STORAGE_PATH: str = "../storage" if ENVIRONMENT == "local" else '/opt/kiwi/uploads/file'
+    FILE_SERVER_URL: str = "http://localhost:8000/files"
+    IMAGE_PATH: str = "../img" if ENVIRONMENT == "local" else '/opt/kiwi/img'
 
 
 settings = Settings()  # type: ignore
