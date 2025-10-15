@@ -63,9 +63,9 @@ class Settings(BaseSettings):
 
     SQLITE_DB_PATH: str = "kiwi.sqlite.db"
 
-    POSTGRES_SERVER: str
+    POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str
+    POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
@@ -138,9 +138,9 @@ class Settings(BaseSettings):
     # 用户初始化配置
     TEST_USERNAME: str = "testuser"
     EMAIL_TEST_USER: EmailStr = "test@example.com"
-    FIRST_SUPERUSER: str
-    FIRST_SUPERUSER_EMAIL: EmailStr
-    FIRST_SUPERUSER_PASSWORD: str
+    FIRST_SUPERUSER: str = "admin"
+    FIRST_SUPERUSER_EMAIL: EmailStr = "admin@example.com"
+    FIRST_SUPERUSER_PASSWORD: str = "Pass1234"
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
