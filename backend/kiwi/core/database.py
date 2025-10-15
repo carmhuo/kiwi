@@ -13,14 +13,22 @@ async def init_db():
     """初始化数据库连接池"""
     global async_engine, AsyncSessionLocal
 
+    engine_kwargs = {
+        "echo": settings.DEBUG,
+        "future": True
+    }
+
+    if settings.DATABASE_TYPE.lower() != "sqlite":
+        engine_kwargs.update({
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+            "pool_timeout": settings.DB_POOL_TIMEOUT
+        })
+
     # 创建异步引擎
     async_engine = create_async_engine(
         settings.SQLALCHEMY_DATABASE_URI,
-        echo=settings.DEBUG,
-        future=True,
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        pool_timeout=settings.DB_POOL_TIMEOUT
+        **engine_kwargs
     )
 
     # 创建会话工厂

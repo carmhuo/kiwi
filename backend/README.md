@@ -22,15 +22,21 @@ $ uv sync
 
 Then you can activate the virtual environment with:
 
+macOS/Linux系统：
 ```console
 $ source .venv/bin/activate
 ```
 
-Make sure your editor is using the correct Python virtual environment, with the interpreter at
-`backend/.venv/bin/python`.
+Windows系统：
+```console
+.venv\Scripts\activate
+```
 
-Modify or add SQLModel models for data and SQL tables in `./backend/kiwi/models.py`, API endpoints in
-`./backend/kiwi/api/`, CRUD (Create, Read, Update, Delete) utils in `./backend/kiwi/crud.py`.
+Make sure your editor is using the correct Python virtual environment, with the interpreter at
+`backend/.venv/bin/python` or `backend/.venv/Scripts/python.exe`.
+
+Modify or add SQLModel models for data and SQL tables in `./backend/kiwi/models/`, API endpoints in
+`./backend/kiwi/api/`, CRUD (Create, Read, Update, Delete) utils in `./backend/kiwi/crud/`.
 
 ## VS Code
 
