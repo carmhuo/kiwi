@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from kiwi.core.database import AsyncSessionLocal
+from kiwi.core.database import get_db_session
 from kiwi.schemas import UserCreate
 from kiwi.crud.user import UserCRUD
 from kiwi.core.config import settings
@@ -19,11 +19,11 @@ async def init_db(session: AsyncSession) -> None:
     # This works because the models are already imported and registered from kiwi.models
     # Base.metadata.create_all(engine)
 
-    user = await UserCRUD().get_user_by_email(session, settings.FIRST_SUPERUSER)
+    user = await UserCRUD().get_by_username(session, settings.FIRST_SUPERUSER)
     if not user:
         user_in = UserCreate(
-            username="admin",
-            email=settings.FIRST_SUPERUSER,
+            username=settings.FIRST_SUPERUSER,
+            email=settings.FIRST_SUPERUSER_EMAIL,
             password=settings.FIRST_SUPERUSER_PASSWORD,
             is_superuser=True,
         )
@@ -32,8 +32,9 @@ async def init_db(session: AsyncSession) -> None:
 
 async def init() -> None:
     try:
-        async with AsyncSessionLocal() as session:
-            await init_db(session)
+        db_session_gen = get_db_session()
+        session = await db_session_gen.__anext__()  # 获取生成器的第一个值
+        await init_db(session)
     except Exception as e:
         logger.error(e)
         raise e
